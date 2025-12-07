@@ -70,47 +70,49 @@ Rectangle {
                 onPaint: {
                     var ctx = getContext("2d")
                     ctx.clearRect(0, 0, width, height)
-                    ctx.fillStyle = bluetoothEnabled ? "white" : "#60FFFFFF"
                     ctx.strokeStyle = bluetoothEnabled ? "white" : "#60FFFFFF"
+                    ctx.fillStyle = bluetoothEnabled ? "white" : "#60FFFFFF"
+                    ctx.lineWidth = 1.5
+                    ctx.lineJoin = "round"
+                    ctx.lineCap = "round"
                     
                     var centerX = width / 2
                     var centerY = height / 2
-                    var halfHeight = height * 0.35
-                    var halfWidth = width * 0.25
+                    var h = height * 0.45  // Hauteur du logo
+                    var w = width * 0.28   // Largeur des triangles
                     
                     // Ligne verticale centrale
-                    ctx.lineWidth = width * 0.12
                     ctx.beginPath()
-                    ctx.moveTo(centerX, centerY - halfHeight)
-                    ctx.lineTo(centerX, centerY + halfHeight)
+                    ctx.moveTo(centerX, centerY - h)
+                    ctx.lineTo(centerX, centerY + h)
                     ctx.stroke()
                     
-                    // Triangle supérieur (forme en zigzag)
-                    ctx.lineWidth = width * 0.12
-                    ctx.lineJoin = "miter"
+                    // Triangle supérieur droit (forme en B)
                     ctx.beginPath()
-                    ctx.moveTo(centerX, centerY - halfHeight)
-                    ctx.lineTo(centerX + halfWidth, centerY)
+                    ctx.moveTo(centerX, centerY - h)
+                    ctx.lineTo(centerX + w, centerY - h * 0.25)
                     ctx.lineTo(centerX, centerY)
+                    ctx.closePath()
                     ctx.stroke()
                     
-                    // Triangle inférieur
+                    // Triangle inférieur droit
                     ctx.beginPath()
-                    ctx.moveTo(centerX, centerY + halfHeight)
-                    ctx.lineTo(centerX + halfWidth, centerY)
-                    ctx.lineTo(centerX, centerY)
+                    ctx.moveTo(centerX, centerY)
+                    ctx.lineTo(centerX + w, centerY + h * 0.25)
+                    ctx.lineTo(centerX, centerY + h)
+                    ctx.closePath()
                     ctx.stroke()
                     
-                    // Diagonale gauche haut
+                    // Ligne diagonale supérieure gauche
                     ctx.beginPath()
-                    ctx.moveTo(centerX - halfWidth * 0.8, centerY - halfHeight * 0.6)
-                    ctx.lineTo(centerX + halfWidth, centerY)
+                    ctx.moveTo(centerX - w * 0.85, centerY - h * 0.55)
+                    ctx.lineTo(centerX + w, centerY + h * 0.25)
                     ctx.stroke()
                     
-                    // Diagonale gauche bas
+                    // Ligne diagonale inférieure gauche
                     ctx.beginPath()
-                    ctx.moveTo(centerX - halfWidth * 0.8, centerY + halfHeight * 0.6)
-                    ctx.lineTo(centerX + halfWidth, centerY)
+                    ctx.moveTo(centerX - w * 0.85, centerY + h * 0.55)
+                    ctx.lineTo(centerX + w, centerY - h * 0.25)
                     ctx.stroke()
                 }
                 

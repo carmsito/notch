@@ -657,7 +657,7 @@ Item {
     Process {
         id: scanProc
         running: false
-        command: ["python3", "/home/emmanuel/.config/quickshell/components/bt_scan.py"]
+        command: ["python3", "/home/emmanuel/.config/quickshell/components/controlcenter/modules/bt_scan.py"]
         
         stdout: StdioCollector {
             onRead: data => {
