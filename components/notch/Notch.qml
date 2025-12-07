@@ -4,6 +4,7 @@ import Quickshell.Io
 import Quickshell.Hyprland
 import "../controlcenter/modules"
 import "../bar/modules"
+import "../testcontainer"
 import "modules"
 
 Item {
@@ -12,7 +13,9 @@ Item {
     width: hovered ? expandedWidth : collapsedWidth
 
     property int collapsedHeight: 40
-    property int expandedHeight: 340  // Augmenté pour contenir 5 modules (2x70 + 3x70 + 4x10 spacing)
+    // property int expandedHeight: 340  // Augmenté pour contenir 5 modules (2x70 + 3x70 + 4x10 spacing)
+    property int expandedHeight: 380
+
     property int collapsedRadius: 20
     property int expandedRadius: 15
 
@@ -28,6 +31,11 @@ Item {
     property bool needsKeyboardFocus: false       // Pour demander le focus clavier
     // Empêche le hover initial de s'activer au démarrage (barre démarre compacte)
     property bool startupLock: true
+
+    // Navigation entre conteneurs
+    property var containers: ["Control Center", "Test Container"]
+    property int currentContainerIndex: 0
+    property string currentContainerTitle: containers[currentContainerIndex]
 
     implicitHeight: hoverStrip.height + notchRect.height
 
@@ -383,14 +391,15 @@ Item {
         }
 
         // ==================================================
-        // 4. MODULES WIFI/BLUETOOTH/BRIGHTNESS/VOLUME (EXPANDED MODE)
+        // 4. HEADER DE NAVIGATION (EXPANDED MODE)
         // ==================================================
-        Column {
-            id: controlCenterModules
+        Rectangle {
+            id: navigationHeader
             anchors.top: parent.top
-            anchors.topMargin: 12
-            anchors.horizontalCenter: parent.horizontalCenter
-            spacing: 10
+            anchors.left: parent.left
+            anchors.right: parent.right
+            height: 50
+            color: "transparent"
             
             opacity: root.hovered && !root.showingBluetoothDevices && !root.showingWifiNetworks ? 1 : 0
             visible: opacity > 0
@@ -399,10 +408,148 @@ Item {
                 NumberAnimation { duration: 300; easing.type: Easing.OutCubic } 
             }
 
+            Row {
+                anchors.fill: parent
+                anchors.leftMargin: 15
+                anchors.rightMargin: 15
+                spacing: 10
+
+                // Bouton précédent (gauche)
+                Rectangle {
+                    id: leftNavButton
+                    width: 35
+                    height: 35
+                    anchors.verticalCenter: parent.verticalCenter
+                    radius: 8
+                    color: leftNavMouseArea.containsMouse ? "#40FFFFFF" : "#20FFFFFF"
+                    border.color: "#30FFFFFF"
+                    border.width: 1
+
+                    Behavior on color {
+                        ColorAnimation { duration: 150 }
+                    }
+
+                    // Icône flèche gauche
+                    Text {
+                        anchors.centerIn: parent
+                        text: "‹"
+                        font.pixelSize: 24
+                        font.bold: true
+                        color: root.currentContainerIndex > 0 ? "#ffffff" : "#555555"
+                    }
+
+                    MouseArea {
+                        id: leftNavMouseArea
+                        anchors.fill: parent
+                        hoverEnabled: true
+                        enabled: root.currentContainerIndex > 0
+                        cursorShape: enabled ? Qt.PointingHandCursor : Qt.ArrowCursor
+                        
+                        onClicked: {
+                            if (root.currentContainerIndex > 0) {
+                                root.currentContainerIndex--
+                                root.currentContainerTitle = root.containers[root.currentContainerIndex]
+                            }
+                        }
+                    }
+                }
+
+                // Titre du conteneur
+                Item {
+                    width: parent.width - 80
+                    height: 35
+                    anchors.verticalCenter: parent.verticalCenter
+
+                    Rectangle {
+                        anchors.centerIn: parent
+                        width: titleText.width + 24
+                        height: 28
+                        radius: 14
+                        color: "#502a2a2a"
+                        border.color: "#30FFFFFF"
+                        border.width: 1
+                        
+                        Text {
+                            id: titleText
+                            anchors.centerIn: parent
+                            text: root.currentContainerTitle
+                            font.pixelSize: 14
+                            font.bold: true
+                            font.family: "SF Pro Display"
+                            color: "#ffffff"
+                            
+                            Behavior on opacity {
+                                NumberAnimation { duration: 150 }
+                            }
+                        }
+                    }
+                }
+
+                // Bouton suivant (droite)
+                Rectangle {
+                    id: rightNavButton
+                    width: 35
+                    height: 35
+                    anchors.verticalCenter: parent.verticalCenter
+                    radius: 8
+                    color: rightNavMouseArea.containsMouse ? "#40FFFFFF" : "#20FFFFFF"
+                    border.color: "#30FFFFFF"
+                    border.width: 1
+
+                    Behavior on color {
+                        ColorAnimation { duration: 150 }
+                    }
+
+                    // Icône flèche droite
+                    Text {
+                        anchors.centerIn: parent
+                        text: "›"
+                        font.pixelSize: 24
+                        font.bold: true
+                        color: root.currentContainerIndex < root.containers.length - 1 ? "#ffffff" : "#555555"
+                    }
+
+                    MouseArea {
+                        id: rightNavMouseArea
+                        anchors.fill: parent
+                        hoverEnabled: true
+                        enabled: root.currentContainerIndex < root.containers.length - 1
+                        cursorShape: enabled ? Qt.PointingHandCursor : Qt.ArrowCursor
+                        
+                        onClicked: {
+                            if (root.currentContainerIndex < root.containers.length - 1) {
+                                root.currentContainerIndex++
+                                root.currentContainerTitle = root.containers[root.currentContainerIndex]
+                            }
+                        }
+                    }
+                }
+            }
+        }
+
+        // ==================================================
+        // 5. MODULES WIFI/BLUETOOTH/BRIGHTNESS/VOLUME (EXPANDED MODE)
+        // ==================================================
+        Column {
+            id: controlCenterModules
+            anchors.top: parent.top
+            anchors.topMargin: 55  // Augmenté pour laisser place au header de navigation
+            anchors.horizontalCenter: parent.horizontalCenter
+            width: 460  // Largeur fixe pour centrer correctement tous les modules
+            spacing: 10
+            
+            opacity: root.hovered && !root.showingBluetoothDevices && !root.showingWifiNetworks ? 1 : 0
+            
+            Behavior on opacity { 
+                NumberAnimation { duration: 300; easing.type: Easing.OutCubic } 
+            }
+
+            // Afficher uniquement si on est sur Control Center
+            visible: root.currentContainerIndex === 0 && opacity > 0
+
             // Rangée WiFi + Bluetooth
             Row {
                 spacing: 10
-                anchors.horizontalCenter: parent.horizontalCenter
 
                 WifiModule {
                     id: wifiMod
@@ -428,6 +575,7 @@ Item {
             BrightnessModule {
                 id: brightnessLaptop
                 width: 450
+                anchors.horizontalCenter: parent.horizontalCenter
                 displayName: "Display"
                 deviceName: ""  // Device par défaut (laptop)
                 onInteractionStarted: {
@@ -443,6 +591,7 @@ Item {
             BrightnessModule {
                 id: brightnessScreenpad
                 width: 450
+                anchors.horizontalCenter: parent.horizontalCenter
                 displayName: "ScreenPad"
                 deviceName: "asus_screenpad"
                 
@@ -459,6 +608,7 @@ Item {
             VolumeModule {
                 id: volumeMod
                 width: 450
+                anchors.horizontalCenter: parent.horizontalCenter
                 
                 onInteractionStarted: {
                     hoverTimer.stop()
@@ -468,6 +618,25 @@ Item {
                     // Ne rien faire, laisser le hover naturel gérer
                 }
             }
+        }
+        
+        // ==================================================
+        // TEST CONTAINER (EXPANDED MODE - Index 1)
+        // ==================================================
+        TestContainer {
+            id: testContainer
+            anchors.top: parent.top
+            anchors.topMargin: 55
+            anchors.horizontalCenter: parent.horizontalCenter
+            
+            opacity: root.hovered && !root.showingBluetoothDevices && !root.showingWifiNetworks ? 1 : 0
+            
+            Behavior on opacity { 
+                NumberAnimation { duration: 300; easing.type: Easing.OutCubic } 
+            }
+
+            // Afficher uniquement si on est sur Test Container
+            visible: root.currentContainerIndex === 1 && opacity > 0
         }
         
         // MouseArea invisible par-dessus TOUT pour maintenir le hover
@@ -498,16 +667,18 @@ Item {
         }
         
         // ==================================================
-        // 5. BLUETOOTH DEVICES LIST (WHEN BLUETOOTH CLICKED)
+        // 6. BLUETOOTH DEVICES LIST (WHEN BLUETOOTH CLICKED)
         // ==================================================
         BluetoothDevicesList {
             id: bluetoothList
-            anchors.top: parent.top
+            anchors.fill: parent
             anchors.topMargin: 12
-            anchors.horizontalCenter: parent.horizontalCenter
+            anchors.bottomMargin: 12
+            anchors.leftMargin: 12
+            anchors.rightMargin: 12
             
             opacity: root.hovered && root.showingBluetoothDevices ? 1 : 0
-            visible: opacity > 0
+            visible: root.currentContainerIndex === 0 && opacity > 0
             
             Behavior on opacity { 
                 NumberAnimation { duration: 300; easing.type: Easing.OutCubic } 
@@ -519,16 +690,18 @@ Item {
         }
 
         // ==================================================
-        // 6. WIFI NETWORKS LIST (WHEN WIFI CLICKED)
+        // 7. WIFI NETWORKS LIST (WHEN WIFI CLICKED)
         // ==================================================
         WifiNetworksList {
             id: wifiList
-            anchors.top: parent.top
+            anchors.fill: parent
             anchors.topMargin: 12
-            anchors.horizontalCenter: parent.horizontalCenter
+            anchors.bottomMargin: 12
+            anchors.leftMargin: 12
+            anchors.rightMargin: 12
 
             opacity: root.hovered && root.showingWifiNetworks ? 1 : 0
-            visible: opacity > 0
+            visible: root.currentContainerIndex === 0 && opacity > 0
 
             Behavior on opacity { 
                 NumberAnimation { duration: 300; easing.type: Easing.OutCubic } 

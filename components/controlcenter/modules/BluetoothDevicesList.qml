@@ -5,7 +5,6 @@ import Quickshell.Io
 Item {
     id: root
     width: 320
-    height: 330
     
     property bool bluetoothEnabled: false
     property var devices: []  // Liste des appareils Bluetooth
@@ -37,14 +36,14 @@ Item {
         anchors.left: parent.left
         anchors.right: parent.right
         anchors.topMargin: 15
-        anchors.leftMargin: -50
-        anchors.rightMargin: 15
+        anchors.leftMargin: 20
+        anchors.rightMargin: 0
         spacing: 8
         z: 1
         
         // En-tête avec bouton retour, titre et toggle
         Row {
-            width: 360
+            width: 320
             height: 32
             spacing: 8
             
@@ -101,7 +100,10 @@ Item {
                 anchors.verticalCenter: parent.verticalCenter
             }
             
-            Item { width: parent.width - 120; height: 1 }
+            Item { 
+                width: 245
+                height: 1
+            }
             
             // Toggle Bluetooth
             Rectangle {
@@ -152,10 +154,10 @@ Item {
         anchors.left: parent.left
         anchors.right: parent.right
         anchors.bottom: parent.bottom
-        anchors.leftMargin: -50
-        anchors.rightMargin: -95
+        anchors.leftMargin: 0
+        anchors.rightMargin: 0
         anchors.topMargin: 8
-        anchors.bottomMargin: 15
+        anchors.bottomMargin: 12
         
         contentHeight: devicesColumn.height
         clip: true
@@ -164,6 +166,7 @@ Item {
             id: devicesColumn
             width: 430
             spacing: 8
+            anchors.horizontalCenter: parent.horizontalCenter
         
         // Spacer
         Item { width: 1; height: 3 }

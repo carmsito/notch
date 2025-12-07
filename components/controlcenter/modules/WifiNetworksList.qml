@@ -7,7 +7,6 @@ import "."
 Item {
     id: root
     width: 430
-    height: 380
 
     property bool wifiEnabled: false
     property string activeName: ""
@@ -267,13 +266,13 @@ Item {
         anchors.left: parent.left
         anchors.right: parent.right
         anchors.topMargin: 15
-        anchors.leftMargin: 10
-        anchors.rightMargin: 15
+        anchors.leftMargin: 0
+        anchors.rightMargin: 0
         spacing: 8
         z: 1
 
         Row {
-            width: 360
+            width: 430
             height: 32
             spacing: 8
 
@@ -308,7 +307,7 @@ Item {
                 anchors.verticalCenter: parent.verticalCenter
             }
 
-            Item { width: parent.width - 120; height: 1 }
+            Item { width: 310; height: 1 }
 
             Rectangle {
                 width: 48
@@ -346,7 +345,7 @@ Item {
         anchors.leftMargin: 0
         anchors.rightMargin: 0
         anchors.topMargin: 8
-        anchors.bottomMargin: 60
+        anchors.bottomMargin: 12
         clip: true
         contentHeight: contentCol.height
         interactive: !blockInput
