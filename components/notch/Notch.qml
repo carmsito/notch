@@ -2,7 +2,9 @@ import QtQuick 2.15
 import Quickshell
 import Quickshell.Io
 import Quickshell.Hyprland
-import "."
+import "../controlcenter/modules"
+import "../bar/modules"
+import "modules"
 
 Item {
     id: root

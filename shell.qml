@@ -1,5 +1,5 @@
 // shell.qml
-import "components"
+import "components/bar"
 
 // Notch {
 //     anchors.horizontalCenter: parent.horizontalCenter
@@ -10,5 +10,5 @@ import "components"
 import Quickshell
 
 Scope {
-  BarNotch {}
+  BarContainer {}
 }

@@ -1,8 +1,8 @@
-// components/BarNotch.qml
+// components/bar/BarContainer.qml
 import QtQuick 2.15
 import Quickshell
 import Quickshell.Wayland
-import "."
+import "../notch"
 
 Scope {
     Variants {
