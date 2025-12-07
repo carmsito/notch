@@ -1,0 +1,236 @@
+import QtQuick 2.15
+import Quickshell
+import Quickshell.Io
+import Quickshell.Hyprland
+import "."
+
+Item {
+    id: root
+
+    width: hovered ? expandedWidth : collapsedWidth
+
+    property int collapsedHeight: 40
+    property int expandedHeight: 100  // Réduit pour juste contenir les 2 modules
+    property int collapsedRadius: 20
+    property int expandedRadius: 15
+
+    property int collapsedWidth: 700 
+    property int expandedWidth: 320  // Réduit pour 2 modules côte à côte
+
+    property int hoverTriggerWidth: 150 
+
+    property bool hovered: false
+
+    implicitHeight: hoverStrip.height + notchRect.height
+
+    // --- LOGIQUE ---
+    Battery { id: batteryData }
+    
+    property string wifiPath: "/sys/class/net/wlan0/operstate"
+    property var wifiFile: File.exists(wifiPath) ? File.read(wifiPath) : "down"
+    property bool isWifiConnected: wifiFile && wifiFile.trim() === "up"
+
+    Time { id: timeSource }
+
+    // Timer pour éviter le clignotement du hover
+    Timer {
+        id: hoverTimer
+        interval: 150  // Délai court mais suffisant
+        repeat: false
+        onTriggered: {
+            root.hovered = false
+        }
+    }
+
+    // --- VISUEL ---
+
+    // 1. Zone de détection hover AU-DESSUS
+    Item {
+        id: hoverStrip
+        width: hoverTriggerWidth 
+        height: 8  // Augmenter légèrement pour meilleure détection
+        anchors.horizontalCenter: notchRect.horizontalCenter
+        anchors.bottom: notchRect.top
+        anchors.bottomMargin: -4  // Chevaucher légèrement avec le rectangle
+
+        MouseArea {
+            anchors.fill: parent
+            hoverEnabled: true
+            acceptedButtons: Qt.NoButton
+            onEntered: {
+                root.hovered = true
+                hoverTimer.stop()
+            }
+            onExited: {
+                // Ne redémarre le timer que si on n'est pas dans le rectangle principal
+                if (!globalHoverArea.containsMouse) {
+                    hoverTimer.restart()
+                }
+            }
+        }
+    }
+
+    // 2. Le rectangle principal
+    Rectangle {
+        id: notchRect
+        anchors.horizontalCenter: parent.horizontalCenter
+        anchors.bottom: parent.bottom
+
+        width: root.width
+        height: hovered ? expandedHeight : collapsedHeight
+        radius: hovered ? expandedRadius : collapsedRadius
+
+        color: hovered ? 'transparent' : '#c2000000'
+        border.color: hovered ? 'transparent' : "#33FFFFFF"
+        border.width: hovered ? 0 : 1
+
+        Behavior on width { NumberAnimation { duration: 100; easing.type: Easing.OutExpo } }
+        Behavior on height { NumberAnimation { duration: 100; easing.type: Easing.OutExpo } }
+        Behavior on radius { NumberAnimation { duration: 100; easing.type: Easing.OutExpo } }
+
+        // MouseArea globale pour maintenir le hover UNIQUEMENT quand déjà hover
+        // Désactivée quand les workspaces sont actifs ou quand pas encore en hover
+        MouseArea {
+            id: globalHoverArea
+            anchors.fill: parent
+            anchors.topMargin: -8  // Étendre vers le haut pour capturer la souris qui descend
+            hoverEnabled: true
+            acceptedButtons: Qt.NoButton
+            propagateComposedEvents: true
+            enabled: root.hovered && !wsWidget.isInteracting  // Actif SEULEMENT si déjà hover
+            z: -100  // Très en arrière pour ne rien bloquer
+            
+            onEntered: {
+                root.hovered = true
+                hoverTimer.stop()
+            }
+            onExited: {
+                hoverTimer.restart()
+            }
+        }
+
+        // --- CONTENU ---
+
+        // ==================================================
+        // 1. GAUCHE (WORKSPACES + BATTERIE)
+        // ==================================================
+        Row {
+            id: leftGroup
+            
+            // LOGIQUE D'EXPANSION :
+            // Si on interagit avec les workspaces (wsWidget.isInteracting) :
+            // -> On casse l'ancrage à gauche et on se centre
+            // -> On prend toute la largeur
+            anchors.left: wsWidget.isInteracting ? undefined : parent.left
+            anchors.leftMargin: wsWidget.isInteracting ? 0 : 12
+            
+            anchors.horizontalCenter: wsWidget.isInteracting ? parent.horizontalCenter : undefined
+            anchors.verticalCenter: parent.verticalCenter
+            
+            width: wsWidget.isInteracting ? parent.width : undefined
+
+            spacing: 10
+            
+            // Gestion visibilité globale (disparait si la notch s'ouvre en mode expanded)
+            opacity: root.hovered ? 0 : 1
+            visible: opacity > 0 
+            Behavior on opacity { NumberAnimation { duration: 200 } }
+
+            // --- WORKSPACES ---
+            Workspaces {
+                id: wsWidget
+                anchors.verticalCenter: parent.verticalCenter
+                // On passe la largeur totale disponible à Workspaces pour qu'il sache s'étendre
+                fullWidth: notchRect.width
+            }
+
+            // --- BATTERIE (DOIT DISPARAITRE QUAND WORKSPACES S'ÉTEND) ---
+            Row {
+                spacing: 6
+                // Si on joue avec les workspaces, la batterie se cache pour laisser la place
+                visible: !wsWidget.isInteracting 
+                opacity: visible ? 1 : 0
+                
+                AppleBattery {
+                    width: 24
+                    height: 12
+                    level: batteryData.batteryLevel
+                    charging: batteryData.isCharging
+                    anchors.verticalCenter: parent.verticalCenter
+                    anchors.verticalCenterOffset: 3
+                }
+                Text {
+                    text: batteryData.batteryLevel + "%"
+                    color: batteryData.isCharging ? "#32D74B" : "white"
+                    font.pixelSize: 12
+                    font.bold: true
+                    anchors.verticalCenter: parent.verticalCenter
+                    anchors.verticalCenterOffset: 3
+                }
+            }
+        }
+
+        // 2. HORLOGE (CENTRE)
+        ClockWidget {
+            id: centerClock
+            anchors.centerIn: parent
+            time: timeSource.time
+            color: "white"
+            
+            // Disparait si on joue avec les Workspaces ou si hover
+            visible: !wsWidget.isInteracting && !root.hovered
+        }
+
+        // 3. WIFI (DROITE)
+        Row {
+            anchors.right: parent.right
+            anchors.rightMargin: 18
+            anchors.verticalCenter: parent.verticalCenter
+            spacing: 6
+
+            opacity: root.hovered ? 0 : 1
+            // Disparait si on joue avec les Workspaces
+            visible: opacity > 0 && !wsWidget.isInteracting
+            
+            Behavior on opacity { NumberAnimation { duration: 200 } }
+
+            Image {
+                width: 16; height: 16
+                source: root.isWifiConnected ? "image://icon/network-wireless-connected-symbolic" : "image://icon/network-wireless-disconnected-symbolic"
+                sourceSize.width: 16; sourceSize.height: 16
+                anchors.verticalCenter: parent.verticalCenter
+            }
+        }
+
+        // ==================================================
+        // 4. MODULES WIFI ET BLUETOOTH (EXPANDED MODE)
+        // ==================================================
+        // Modules affichés directement sans conteneur, style macOS
+        Row {
+            id: connectivityModules
+            anchors.top: parent.top
+            anchors.topMargin: 12
+            anchors.horizontalCenter: parent.horizontalCenter
+            spacing: 10
+            
+            opacity: root.hovered ? 1 : 0
+            visible: opacity > 0
+            
+            Behavior on opacity { 
+                NumberAnimation { duration: 300; easing.type: Easing.OutCubic } 
+            }
+
+            WifiModule {
+                id: wifiMod
+                width: 150
+                height: 70
+            }
+
+            BluetoothModule {
+                id: bluetoothMod
+                width: 150
+                height: 70
+            }
+        }
+    }
+}

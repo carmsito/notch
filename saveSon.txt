@@ -1,0 +1,379 @@
+import QtQuick 2.15
+import Quickshell
+import Quickshell.Io
+
+Rectangle {
+    id: root
+    height: 70
+    radius: 12
+    
+    property bool isActive: false
+    property int volumeLevel: 50
+    property bool isMuted: false
+    property int lastKnownVolume: 50  // Pour calculer la différence
+    
+    signal interactionStarted()
+    signal interactionEnded()
+    
+    color: isActive ? "#60404040" : "#502a2a2a"
+    border.color: "#30FFFFFF"
+    border.width: 1
+    
+    Behavior on color { ColorAnimation { duration: 150 } }
+    
+    // Lecture du volume actuel (global-audio ID 38)
+    Process {
+        id: getVolume
+        running: false
+        command: ["sh", "-c", "wpctl get-volume 38 | awk '{print int($2 * 100)}'"]
+        
+        onExited: {
+            if (exitCode === 0 && stdout) {
+                var trimmed = stdout.trim();
+                if (trimmed !== "") {
+                    var vol = parseInt(trimmed);
+                    root.volumeLevel = vol;
+                    root.lastKnownVolume = vol;
+                    sliderMouse.value = vol / 100;
+                }
+            }
+            running = false;  // Réinitialiser pour la prochaine lecture
+        }
+    }
+    
+    // Vérifier si muted
+    Process {
+        id: getMuteStatus
+        running: false
+        command: ["sh", "-c", "wpctl get-volume 38 | grep -q MUTED && echo 1 || echo 0"]
+        
+        onExited: {
+            if (exitCode === 0 && stdout) {
+                var trimmed = stdout.trim();
+                root.isMuted = (trimmed === "1");
+            }
+            running = false;  // Réinitialiser pour la prochaine lecture
+        }
+    }
+    
+    // Timer pour rafraîchir le volume
+    Timer {
+        interval: 200  // Réduit de 500 à 200ms pour synchronisation plus rapide
+        repeat: true
+        running: true
+        onTriggered: {
+            if (!sliderMouse.pressed) {
+                getVolume.running = true;
+                getMuteStatus.running = true;
+            }
+        }
+    }
+    
+    // Démarrage initial
+    Component.onCompleted: {
+        getVolume.running = true;
+        getMuteStatus.running = true;
+    }
+    
+    MouseArea {
+        anchors.fill: parent
+        hoverEnabled: true
+        propagateComposedEvents: true
+        
+        onEntered: {
+            root.isActive = true
+        }
+        onExited: {
+            root.isActive = false
+        }
+        onPressed: mouse.accepted = false
+    }
+    
+    // Disposition: Icône volume bas - Slider - Icône volume haut
+    Column {
+        anchors.centerIn: parent
+        anchors.verticalCenterOffset: -5
+        spacing: 8
+        width: parent.width - 24
+        
+        // Label en haut
+        Text {
+            text: "Sound"
+            color: "white"
+            font.pixelSize: 13
+            font.bold: true
+            anchors.horizontalCenter: parent.horizontalCenter
+        }
+        
+        // Affichage du volume en %
+        Text {
+            text: root.volumeLevel + "%"
+            color: root.isMuted ? "#FF6B6B" : "white"
+            font.pixelSize: 11
+            opacity: 0.7
+            anchors.horizontalCenter: parent.horizontalCenter
+        }
+        
+        // Row avec icône - slider - icône
+        Row {
+            width: parent.width
+            spacing: 10
+            anchors.horizontalCenter: parent.horizontalCenter
+            
+            // Icône volume faible (gauche)
+            Item {
+                width: 18
+                height: 18
+                anchors.verticalCenter: parent.verticalCenter
+                opacity: root.isMuted ? 0.3 : 0.6
+                
+                // Haut-parleur (forme trapèze)
+                Rectangle {
+                    width: 5
+                    height: 8
+                    color: "white"
+                    x: 2
+                    anchors.verticalCenter: parent.verticalCenter
+                }
+                
+                // Pavillon
+                Item {
+                    width: 4
+                    height: 10
+                    x: 7
+                    anchors.verticalCenter: parent.verticalCenter
+                    
+                    Rectangle {
+                        width: 4
+                        height: 2
+                        color: "white"
+                        y: 0
+                        x: 0
+                    }
+                    Rectangle {
+                        width: 4
+                        height: 2
+                        color: "white"
+                        y: 8
+                        x: 0
+                    }
+                    Rectangle {
+                        width: 1
+                        height: 10
+                        color: "white"
+                        x: 0
+                    }
+                }
+                
+                // Onde sonore faible (1 arc)
+                Rectangle {
+                    width: 2
+                    height: 5
+                    radius: 1
+                    color: "white"
+                    x: 12
+                    anchors.verticalCenter: parent.verticalCenter
+                    border.width: 1
+                    border.color: "white"
+                    opacity: 0.7
+                }
+            }
+            
+            // Slider au centre
+            Item {
+                width: parent.width - 36 - 20
+                height: 20
+                anchors.verticalCenter: parent.verticalCenter
+                
+                Rectangle {
+                    id: sliderTrack
+                    width: parent.width
+                    height: 6
+                    radius: 3
+                    color: "#40FFFFFF"
+                    anchors.verticalCenter: parent.verticalCenter
+                    
+                    Rectangle {
+                        id: sliderFill
+                        width: parent.width * sliderMouse.value
+                        height: parent.height
+                        radius: 3
+                        color: "white"
+                    }
+                }
+                
+                Rectangle {
+                    id: sliderHandle
+                    width: 20
+                    height: 20
+                    radius: 10
+                    color: "white"
+                    x: (sliderTrack.width - width) * sliderMouse.value
+                    anchors.verticalCenter: parent.verticalCenter
+                    
+                    Behavior on x { 
+                        NumberAnimation { 
+                            duration: sliderMouse.pressed ? 0 : 150 
+                        } 
+                    }
+                }
+                
+                MouseArea {
+                    id: sliderMouse
+                    anchors.fill: parent
+                    hoverEnabled: true
+                    
+                    property real value: 0.5
+                    
+                    onEntered: {
+                        root.interactionStarted()
+                    }
+                    
+                    onExited: {
+                        // Ne signaler la fin d'interaction que si on ne presse plus
+                        if (!pressed) {
+                            root.interactionEnded()
+                        }
+                    }
+                    
+                    onPressed: {
+                        root.interactionStarted()
+                        updateValue(mouse.x)
+                    }
+                    
+                    onReleased: {
+                        root.interactionEnded()
+                        // Relire le volume immédiatement après le relâchement pour resynchroniser
+                        getVolume.running = true;
+                        getMuteStatus.running = true;
+                    }
+                    
+                    function updateValue(mouseX) {
+                        value = Math.max(0, Math.min(1, mouseX / width));
+                        var newVolume = Math.round(value * 100);
+                        
+                        console.log("VolumeModule: Setting volume to", newVolume);
+                        
+                        // Mettre à jour directement avec la valeur absolue (même à 0)
+                        root.volumeLevel = newVolume;
+                        root.lastKnownVolume = newVolume;
+                        
+                        // Appliquer sur global-audio (ID 38) avec valeur absolue (0.00 à 1.00)
+                        var volumeValue = (newVolume / 100).toFixed(2);
+                        setVolume.command = ["wpctl", "set-volume", "38", volumeValue];
+                        console.log("VolumeModule: Command = wpctl set-volume 38", volumeValue);
+                        setVolume.running = true;
+                        
+                        // Unmute si on change le volume au-dessus de 0
+                        if (root.isMuted && newVolume > 0) {
+                            unmuteVolume.running = true;
+                        }
+                    }
+                    
+                    onPositionChanged: {
+                        if (pressed) {
+                            updateValue(mouse.x);
+                        }
+                    }
+                }
+            }
+            
+            // Icône volume fort (droite)
+            Item {
+                width: 18
+                height: 18
+                anchors.verticalCenter: parent.verticalCenter
+                opacity: root.isMuted ? 0.3 : 0.9
+                
+                // Haut-parleur (forme trapèze)
+                Rectangle {
+                    width: 5
+                    height: 10
+                    color: "white"
+                    x: 0
+                    anchors.verticalCenter: parent.verticalCenter
+                }
+                
+                // Pavillon
+                Item {
+                    width: 5
+                    height: 12
+                    x: 5
+                    anchors.verticalCenter: parent.verticalCenter
+                    
+                    Rectangle {
+                        width: 5
+                        height: 2
+                        color: "white"
+                        y: 0
+                        x: 0
+                    }
+                    Rectangle {
+                        width: 5
+                        height: 2
+                        color: "white"
+                        y: 10
+                        x: 0
+                    }
+                    Rectangle {
+                        width: 1.5
+                        height: 12
+                        color: "white"
+                        x: 0
+                    }
+                }
+                
+                // Ondes sonores fortes (3 arcs)
+                Repeater {
+                    model: 3
+                    Rectangle {
+                        width: 1.5
+                        height: 4 + index * 3
+                        radius: 0.75
+                        color: "transparent"
+                        border.width: 1.5
+                        border.color: "white"
+                        x: 11 + index * 2.5
+                        anchors.verticalCenter: parent.verticalCenter
+                        opacity: 0.8 - (index * 0.2)
+                    }
+                }
+            }
+        }
+    }
+    
+    // Process pour définir le volume
+    Process {
+        id: setVolume
+        running: false
+        
+        onExited: {
+            console.log("VolumeModule: setVolume exited with code", exitCode);
+            if (exitCode !== 0 && stderr) {
+                console.error("VolumeModule: Error:", stderr.trim());
+            }
+        }
+    }
+    
+    // Process pour mute
+    Process {
+        id: muteVolume
+        running: false
+        command: ["wpctl", "set-mute", "38", "1"]
+        
+        onExited: {
+            root.isMuted = true;
+        }
+    }
+    
+    // Process pour unmute
+    Process {
+        id: unmuteVolume
+        running: false
+        command: ["wpctl", "set-mute", "38", "0"]
+        
+        onExited: {
+            root.isMuted = false;
+        }
+    }
+}
