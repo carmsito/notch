@@ -14,7 +14,7 @@ Item {
 
     property int collapsedHeight: 40
     // property int expandedHeight: 340  // Augmenté pour contenir 5 modules (2x70 + 3x70 + 4x10 spacing)
-    property int expandedHeight: 380
+    property int expandedHeight: 395
 
     property int collapsedRadius: 20
     property int expandedRadius: 15
@@ -41,6 +41,22 @@ Item {
 
     // --- LOGIQUE ---
     Battery { id: batteryData }
+
+    // Modules cachés pour alimenter la barre compacte en données
+    // (nécessaire car les modules visuels sont maintenant dans le PathView/Loader)
+    WifiModule { 
+        id: wifiMod
+        visible: false
+        width: 0
+        height: 0
+    }
+    
+    BluetoothModule {
+        id: bluetoothMod
+        visible: false
+        width: 0
+        height: 0
+    }
     
     property string wifiPath: "/sys/class/net/wlan0/operstate"
     property var wifiFile: File.exists(wifiPath) ? File.read(wifiPath) : "down"
@@ -59,6 +75,9 @@ Item {
             root.showingBluetoothDevices = false
             // Reset le showingWifiNetworks quand on quitte complètement
             root.showingWifiNetworks = false
+            
+            // Reset container to default
+            containerView.currentIndex = 0
         }
     }
 
@@ -124,6 +143,8 @@ Item {
         color: hovered ? '#a2000000' : '#d1000000'
         border.color: hovered ? "#30FFFFFF" : "#33FFFFFF"
         border.width: 1
+        
+        clip: true // Important pour l'animation de slide
 
         Behavior on width { NumberAnimation { duration: 100; easing.type: Easing.OutExpo } }
         Behavior on height { NumberAnimation { duration: 100; easing.type: Easing.OutExpo } }
@@ -398,7 +419,7 @@ Item {
             anchors.top: parent.top
             anchors.left: parent.left
             anchors.right: parent.right
-            height: 50
+            height: 70
             color: "transparent"
             
             opacity: root.hovered && !root.showingBluetoothDevices && !root.showingWifiNetworks ? 1 : 0
@@ -408,60 +429,42 @@ Item {
                 NumberAnimation { duration: 300; easing.type: Easing.OutCubic } 
             }
 
-            Row {
+            // Titre du conteneur (Centré)
+            Item {
                 anchors.fill: parent
                 anchors.leftMargin: 15
                 anchors.rightMargin: 15
-                spacing: 10
 
-                // Bouton précédent (gauche)
-                Rectangle {
-                    id: leftNavButton
-                    width: 35
-                    height: 35
-                    anchors.verticalCenter: parent.verticalCenter
-                    radius: 8
-                    color: leftNavMouseArea.containsMouse ? "#40FFFFFF" : "#20FFFFFF"
-                    border.color: "#30FFFFFF"
-                    border.width: 1
+                property int scrollAccumulator: 0
 
-                    Behavior on color {
-                        ColorAnimation { duration: 150 }
-                    }
+                MouseArea {
+                    anchors.fill: parent
+                    onWheel: {
+                        // Reset accumulator if direction changes
+                        if ((parent.scrollAccumulator > 0 && wheel.angleDelta.y < 0) || 
+                            (parent.scrollAccumulator < 0 && wheel.angleDelta.y > 0)) {
+                            parent.scrollAccumulator = 0
+                        }
 
-                    // Icône flèche gauche
-                    Text {
-                        anchors.centerIn: parent
-                        text: "‹"
-                        font.pixelSize: 24
-                        font.bold: true
-                        color: root.currentContainerIndex > 0 ? "#ffffff" : "#555555"
-                    }
-
-                    MouseArea {
-                        id: leftNavMouseArea
-                        anchors.fill: parent
-                        hoverEnabled: true
-                        enabled: root.currentContainerIndex > 0
-                        cursorShape: enabled ? Qt.PointingHandCursor : Qt.ArrowCursor
+                        parent.scrollAccumulator += wheel.angleDelta.y
                         
-                        onClicked: {
-                            if (root.currentContainerIndex > 0) {
-                                root.currentContainerIndex--
-                                root.currentContainerTitle = root.containers[root.currentContainerIndex]
-                            }
+                        // Seuil augmenté pour réduire la sensibilité du trackpad
+                        if (parent.scrollAccumulator >= 800) {
+                            containerView.decrementCurrentIndex()
+                            parent.scrollAccumulator = 0
+                        } else if (parent.scrollAccumulator <= -800) {
+                            containerView.incrementCurrentIndex()
+                            parent.scrollAccumulator = 0
                         }
                     }
                 }
 
-                // Titre du conteneur
-                Item {
-                    width: parent.width - 80
-                    height: 35
-                    anchors.verticalCenter: parent.verticalCenter
+                Column {
+                    anchors.centerIn: parent
+                    spacing: 6
 
                     Rectangle {
-                        anchors.centerIn: parent
+                        anchors.horizontalCenter: parent.horizontalCenter
                         width: titleText.width + 24
                         height: 28
                         radius: 14
@@ -483,43 +486,36 @@ Item {
                             }
                         }
                     }
-                }
 
-                // Bouton suivant (droite)
-                Rectangle {
-                    id: rightNavButton
-                    width: 35
-                    height: 35
-                    anchors.verticalCenter: parent.verticalCenter
-                    radius: 8
-                    color: rightNavMouseArea.containsMouse ? "#40FFFFFF" : "#20FFFFFF"
-                    border.color: "#30FFFFFF"
-                    border.width: 1
-
-                    Behavior on color {
-                        ColorAnimation { duration: 150 }
-                    }
-
-                    // Icône flèche droite
-                    Text {
-                        anchors.centerIn: parent
-                        text: "›"
-                        font.pixelSize: 24
-                        font.bold: true
-                        color: root.currentContainerIndex < root.containers.length - 1 ? "#ffffff" : "#555555"
-                    }
-
-                    MouseArea {
-                        id: rightNavMouseArea
-                        anchors.fill: parent
-                        hoverEnabled: true
-                        enabled: root.currentContainerIndex < root.containers.length - 1
-                        cursorShape: enabled ? Qt.PointingHandCursor : Qt.ArrowCursor
+                    // Indicateur de page
+                    Rectangle {
+                        anchors.horizontalCenter: parent.horizontalCenter
+                        width: indicatorRow.width + 16
+                        height: 16
+                        radius: 8
+                        color: "#502a2a2a"
+                        border.color: "#30FFFFFF"
+                        border.width: 1
                         
-                        onClicked: {
-                            if (root.currentContainerIndex < root.containers.length - 1) {
-                                root.currentContainerIndex++
-                                root.currentContainerTitle = root.containers[root.currentContainerIndex]
+                        Behavior on width { NumberAnimation { duration: 200; easing.type: Easing.OutCubic } }
+
+                        Row {
+                            id: indicatorRow
+                            anchors.centerIn: parent
+                            spacing: 6
+                            
+                            Repeater {
+                                model: root.containers.length
+                                
+                                Rectangle {
+                                    width: index === root.currentContainerIndex ? 16 : 6
+                                    height: 6
+                                    radius: 3
+                                    color: index === root.currentContainerIndex ? "#FFFFFF" : "#50FFFFFF"
+                                    
+                                    Behavior on width { NumberAnimation { duration: 200; easing.type: Easing.OutCubic } }
+                                    Behavior on color { ColorAnimation { duration: 150 } }
+                                }
                             }
                         }
                     }
@@ -528,115 +524,136 @@ Item {
         }
 
         // ==================================================
-        // 5. MODULES WIFI/BLUETOOTH/BRIGHTNESS/VOLUME (EXPANDED MODE)
+        // 5. CAROUSEL DES CONTENEURS (PathView)
         // ==================================================
-        Column {
-            id: controlCenterModules
-            anchors.top: parent.top
-            anchors.topMargin: 55  // Augmenté pour laisser place au header de navigation
-            anchors.horizontalCenter: parent.horizontalCenter
-            width: 460  // Largeur fixe pour centrer correctement tous les modules
-            spacing: 10
-            
-            opacity: root.hovered && !root.showingBluetoothDevices && !root.showingWifiNetworks ? 1 : 0
-            
-            Behavior on opacity { 
-                NumberAnimation { duration: 300; easing.type: Easing.OutCubic } 
-            }
-
-            // Afficher uniquement si on est sur Control Center
-            visible: root.currentContainerIndex === 0 && opacity > 0
-
-            // Rangée WiFi + Bluetooth
-            Row {
-                spacing: 10
-
-                WifiModule {
-                    id: wifiMod
-                    width: 225
-                    height: 70
-                    onClicked: {
-                        root.showingWifiNetworks = true
-                    }
-                }
-
-                BluetoothModule {
-                    id: bluetoothMod
-                    width: 225
-                    height: 70
+        
+        // ==================================================
+        // 5. CAROUSEL DES CONTENEURS (PathView)
+        // ==================================================
+        
+        Component {
+            id: controlCenterComponent
+            Item {
+                width: 460
+                height: 400
+                
+                Column {
+                    anchors.top: parent.top
+                    anchors.horizontalCenter: parent.horizontalCenter
+                    width: 460
+                    spacing: 10
                     
-                    onClicked: {
-                        root.showingBluetoothDevices = true
-                    }
-                }
-            }
+                    // Rangée WiFi + Bluetooth
+                    Row {
+                        spacing: 10
 
-            // Module Luminosité Laptop (toute la largeur)
-            BrightnessModule {
-                id: brightnessLaptop
-                width: 450
-                anchors.horizontalCenter: parent.horizontalCenter
-                displayName: "Display"
-                deviceName: ""  // Device par défaut (laptop)
-                onInteractionStarted: {
-                    hoverTimer.stop()
-                }
-                
-                onInteractionEnded: {
-                    // Ne rien faire, laisser le hover naturel gérer
-                }
-            }
-            
-            // Module Luminosité ScreenPad
-            BrightnessModule {
-                id: brightnessScreenpad
-                width: 450
-                anchors.horizontalCenter: parent.horizontalCenter
-                displayName: "ScreenPad"
-                deviceName: "asus_screenpad"
-                
-                onInteractionStarted: {
-                    hoverTimer.stop()
-                }
-                
-                onInteractionEnded: {
-                    // Ne rien faire, laisser le hover naturel gérer
-                }
-            }
-            
-            // Module Volume
-            VolumeModule {
-                id: volumeMod
-                width: 450
-                anchors.horizontalCenter: parent.horizontalCenter
-                
-                onInteractionStarted: {
-                    hoverTimer.stop()
-                }
-                
-                onInteractionEnded: {
-                    // Ne rien faire, laisser le hover naturel gérer
+                        WifiModule {
+                            id: wifiMod
+                            width: 225
+                            height: 70
+                            onClicked: {
+                                root.showingWifiNetworks = true
+                            }
+                        }
+
+                        BluetoothModule {
+                            id: bluetoothMod
+                            width: 225
+                            height: 70
+                            
+                            onClicked: {
+                                root.showingBluetoothDevices = true
+                            }
+                        }
+                    }
+
+                    // Module Luminosité Laptop
+                    BrightnessModule {
+                        id: brightnessLaptop
+                        width: 450
+                        anchors.horizontalCenter: parent.horizontalCenter
+                        displayName: "Display"
+                        deviceName: ""
+                        onInteractionStarted: hoverTimer.stop()
+                    }
+                    
+                    // Module Luminosité ScreenPad
+                    BrightnessModule {
+                        id: brightnessScreenpad
+                        width: 450
+                        anchors.horizontalCenter: parent.horizontalCenter
+                        displayName: "ScreenPad"
+                        deviceName: "asus_screenpad"
+                        onInteractionStarted: hoverTimer.stop()
+                    }
+                    
+                    // Module Volume
+                    VolumeModule {
+                        id: volumeMod
+                        width: 450
+                        anchors.horizontalCenter: parent.horizontalCenter
+                        onInteractionStarted: hoverTimer.stop()
+                    }
                 }
             }
         }
-        
-        // ==================================================
-        // PERFORMANCE CONTAINER (EXPANDED MODE - Index 1)
-        // ==================================================
-        PerformanceContainer {
-            id: performanceContainer
+
+        Component {
+            id: performanceComponent
+            Item {
+                width: 460
+                height: 400
+                
+                PerformanceContainer {
+                    id: performanceContainer
+                    anchors.top: parent.top
+                    anchors.horizontalCenter: parent.horizontalCenter
+                }
+            }
+        }
+
+        PathView {
+            id: containerView
             anchors.top: parent.top
-            anchors.topMargin: 55
+            anchors.topMargin: 70
+            anchors.bottom: parent.bottom
+            width: 500
             anchors.horizontalCenter: parent.horizontalCenter
             
+            model: 2 // Nombre de conteneurs
+            
+            delegate: Loader {
+                width: 460
+                height: 400
+                sourceComponent: index === 0 ? controlCenterComponent : performanceComponent
+            }
+            
+            // Configuration du carrousel
+            pathItemCount: 2
+            preferredHighlightBegin: 0.5
+            preferredHighlightEnd: 0.5
+            highlightRangeMode: PathView.StrictlyEnforceRange
+            snapMode: PathView.SnapOneItem
+            dragMargin: 0 // Désactive le drag si on veut juste le scroll
+            
+            path: Path {
+                startX: -containerView.width / 2
+                startY: 200
+                PathLine { x: containerView.width * 1.5; y: 200 }
+            }
+
+            // Synchro avec l'index global
+            onCurrentIndexChanged: {
+                root.currentContainerIndex = currentIndex
+                root.currentContainerTitle = root.containers[currentIndex]
+            }
+            
             opacity: root.hovered && !root.showingBluetoothDevices && !root.showingWifiNetworks ? 1 : 0
+            visible: opacity > 0
             
             Behavior on opacity { 
                 NumberAnimation { duration: 300; easing.type: Easing.OutCubic } 
             }
-
-            // Afficher uniquement si on est sur Performance
-            visible: root.currentContainerIndex === 1 && opacity > 0
         }
         
         // MouseArea invisible par-dessus TOUT pour maintenir le hover
