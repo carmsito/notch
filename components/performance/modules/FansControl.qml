@@ -8,7 +8,7 @@ Rectangle {
     width: 160
     height: 235
     radius: 12
-    color: "#502a2a2a"
+    color: "#50404040"
     border.color: "#30FFFFFF"
     border.width: 1
     

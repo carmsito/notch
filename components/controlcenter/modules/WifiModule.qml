@@ -252,7 +252,8 @@ Rectangle {
         color: wifiEnabled ? "#32D74B" : "transparent"
         anchors.right: parent.right
         anchors.top: parent.top
-        anchors.margins: 10
+        anchors.rightMargin: 20
+        anchors.topMargin: 10
         
         Behavior on color { ColorAnimation { duration: 200 } }
     }

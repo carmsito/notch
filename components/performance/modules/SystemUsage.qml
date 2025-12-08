@@ -40,7 +40,7 @@ Item {
                 Layout.preferredWidth: 135
                 Layout.preferredHeight: 80
                 radius: 10
-                color: "#502a2a2a"
+                color: "#50404040"
                 border.color: "#30FFFFFF"
                 border.width: 1
 
@@ -106,7 +106,7 @@ Item {
                 Layout.preferredWidth: 135
                 Layout.preferredHeight: 80
                 radius: 10
-                color: "#502a2a2a"
+                color: "#50404040"
                 border.color: "#30FFFFFF"
                 border.width: 1
 
@@ -171,7 +171,7 @@ Item {
             Layout.fillWidth: true
             Layout.preferredHeight: 65
             radius: 10
-            color: "#502a2a2a"
+            color: "#50404040"
             border.color: "#30FFFFFF"
             border.width: 1
 
@@ -250,7 +250,7 @@ Item {
             Layout.fillWidth: true
             Layout.preferredHeight: 78
             radius: 10
-            color: "#502a2a2a"
+            color: "#50404040"
             border.color: "#30FFFFFF"
             border.width: 1
 

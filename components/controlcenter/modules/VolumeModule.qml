@@ -19,7 +19,7 @@ Rectangle {
     signal interactionStarted()
     signal interactionEnded()
 
-    color: isActive ? "#60404040" : "#502a2a2a"
+    color: isActive ? "#60404040" : "#50404040"
     border.color: "#30FFFFFF"
     border.width: 1
 
