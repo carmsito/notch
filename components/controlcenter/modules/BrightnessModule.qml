@@ -180,6 +180,7 @@ Rectangle {
                     id: sliderMouse
                     anchors.fill: parent
                     hoverEnabled: true
+                    preventStealing: true // Empêche le PathView de voler le drag
                     
                     property real value: 1.0
                     

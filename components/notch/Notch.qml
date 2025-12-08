@@ -634,7 +634,9 @@ Item {
             preferredHighlightEnd: 0.5
             highlightRangeMode: PathView.StrictlyEnforceRange
             snapMode: PathView.SnapOneItem
-            dragMargin: 0 // Désactive le drag si on veut juste le scroll
+            // dragMargin: 0 // Désactivé pour permettre le swipe
+            interactive: true // Permet le swipe
+            flickDeceleration: 1500 // Ajuste la vitesse du flick
             
             path: Path {
                 startX: -containerView.width / 2
