@@ -13,7 +13,6 @@ Item {
     width: hovered ? expandedWidth : collapsedWidth
 
     property int collapsedHeight: 40
-    // property int expandedHeight: 340  // Augmenté pour contenir 5 modules (2x70 + 3x70 + 4x10 spacing)
     property int expandedHeight: 395
 
     property int collapsedRadius: 20
@@ -41,22 +40,6 @@ Item {
 
     // --- LOGIQUE ---
     Battery { id: batteryData }
-
-    // Modules cachés pour alimenter la barre compacte en données
-    // (nécessaire car les modules visuels sont maintenant dans le PathView/Loader)
-    WifiModule { 
-        id: wifiMod
-        visible: false
-        width: 0
-        height: 0
-    }
-    
-    BluetoothModule {
-        id: bluetoothMod
-        visible: false
-        width: 0
-        height: 0
-    }
     
     property string wifiPath: "/sys/class/net/wlan0/operstate"
     property var wifiFile: File.exists(wifiPath) ? File.read(wifiPath) : "down"
@@ -77,7 +60,7 @@ Item {
             root.showingWifiNetworks = false
             
             // Reset container to default
-            containerView.currentIndex = 0
+            root.currentContainerIndex = 0
         }
     }
 
@@ -143,8 +126,6 @@ Item {
         color: hovered ? '#a2000000' : '#d1000000'
         border.color: hovered ? "#30FFFFFF" : "#33FFFFFF"
         border.width: 1
-        
-        clip: true // Important pour l'animation de slide
 
         Behavior on width { NumberAnimation { duration: 100; easing.type: Easing.OutExpo } }
         Behavior on height { NumberAnimation { duration: 100; easing.type: Easing.OutExpo } }
@@ -450,10 +431,18 @@ Item {
                         
                         // Seuil augmenté pour réduire la sensibilité du trackpad
                         if (parent.scrollAccumulator >= 800) {
-                            containerView.decrementCurrentIndex()
+                            if (root.currentContainerIndex > 0) {
+                                root.currentContainerIndex--
+                            } else {
+                                root.currentContainerIndex = root.containers.length - 1
+                            }
                             parent.scrollAccumulator = 0
                         } else if (parent.scrollAccumulator <= -800) {
-                            containerView.incrementCurrentIndex()
+                            if (root.currentContainerIndex < root.containers.length - 1) {
+                                root.currentContainerIndex++
+                            } else {
+                                root.currentContainerIndex = 0
+                            }
                             parent.scrollAccumulator = 0
                         }
                     }
@@ -524,137 +513,105 @@ Item {
         }
 
         // ==================================================
-        // 5. CAROUSEL DES CONTENEURS (PathView)
+        // 5. SLIDING CONTENT (REMPLACE LES COLONNES SÉPARÉES)
         // ==================================================
-        
-        // ==================================================
-        // 5. CAROUSEL DES CONTENEURS (PathView)
-        // ==================================================
-        
-        Component {
-            id: controlCenterComponent
-            Item {
-                width: 460
-                height: 400
-                
-                Column {
-                    anchors.top: parent.top
-                    anchors.horizontalCenter: parent.horizontalCenter
-                    width: 460
-                    spacing: 10
-                    
-                    // Rangée WiFi + Bluetooth
-                    Row {
-                        spacing: 10
-
-                        WifiModule {
-                            id: wifiMod
-                            width: 225
-                            height: 70
-                            onClicked: {
-                                root.showingWifiNetworks = true
-                            }
-                        }
-
-                        BluetoothModule {
-                            id: bluetoothMod
-                            width: 225
-                            height: 70
-                            
-                            onClicked: {
-                                root.showingBluetoothDevices = true
-                            }
-                        }
-                    }
-
-                    // Module Luminosité Laptop
-                    BrightnessModule {
-                        id: brightnessLaptop
-                        width: 450
-                        anchors.horizontalCenter: parent.horizontalCenter
-                        displayName: "Display"
-                        deviceName: ""
-                        onInteractionStarted: hoverTimer.stop()
-                    }
-                    
-                    // Module Luminosité ScreenPad
-                    BrightnessModule {
-                        id: brightnessScreenpad
-                        width: 450
-                        anchors.horizontalCenter: parent.horizontalCenter
-                        displayName: "ScreenPad"
-                        deviceName: "asus_screenpad"
-                        onInteractionStarted: hoverTimer.stop()
-                    }
-                    
-                    // Module Volume
-                    VolumeModule {
-                        id: volumeMod
-                        width: 450
-                        anchors.horizontalCenter: parent.horizontalCenter
-                        onInteractionStarted: hoverTimer.stop()
-                    }
-                }
-            }
-        }
-
-        Component {
-            id: performanceComponent
-            Item {
-                width: 460
-                height: 400
-                
-                PerformanceContainer {
-                    id: performanceContainer
-                    anchors.top: parent.top
-                    anchors.horizontalCenter: parent.horizontalCenter
-                }
-            }
-        }
-
-        PathView {
-            id: containerView
+        Item {
+            id: contentViewport
             anchors.top: parent.top
             anchors.topMargin: 70
-            anchors.bottom: parent.bottom
-            width: 500
             anchors.horizontalCenter: parent.horizontalCenter
-            
-            model: 2 // Nombre de conteneurs
-            
-            delegate: Loader {
-                width: 460
-                height: 400
-                sourceComponent: index === 0 ? controlCenterComponent : performanceComponent
-            }
-            
-            // Configuration du carrousel
-            pathItemCount: 2
-            preferredHighlightBegin: 0.5
-            preferredHighlightEnd: 0.5
-            highlightRangeMode: PathView.StrictlyEnforceRange
-            snapMode: PathView.SnapOneItem
-            // dragMargin: 0 // Désactivé pour permettre le swipe
-            interactive: true // Permet le swipe
-            flickDeceleration: 1500 // Ajuste la vitesse du flick
-            
-            path: Path {
-                startX: -containerView.width / 2
-                startY: 200
-                PathLine { x: containerView.width * 1.5; y: 200 }
-            }
-
-            // Synchro avec l'index global
-            onCurrentIndexChanged: {
-                root.currentContainerIndex = currentIndex
-                root.currentContainerTitle = root.containers[currentIndex]
-            }
+            width: 460
+            height: parent.height - 70
+            clip: true
             
             opacity: root.hovered && !root.showingBluetoothDevices && !root.showingWifiNetworks ? 1 : 0
             visible: opacity > 0
             
-            Behavior on opacity { 
-                NumberAnimation { duration: 300; easing.type: Easing.OutCubic } 
+            Behavior on opacity { NumberAnimation { duration: 300; easing.type: Easing.OutCubic } }
+
+            Row {
+                id: slidingRow
+                // Move the row based on index
+                x: -root.currentContainerIndex * 460
+                Behavior on x { NumberAnimation { duration: 300; easing.type: Easing.OutCubic } }
+                
+                // Container 1: Control Center
+                Item {
+                    width: 460
+                    height: contentViewport.height
+                    
+                    Column {
+                        id: controlCenterModules
+                        anchors.top: parent.top
+                        anchors.horizontalCenter: parent.horizontalCenter
+                        width: 460
+                        spacing: 10
+                        
+                        // Rangée WiFi + Bluetooth
+                        Row {
+                            spacing: 10
+
+                            WifiModule {
+                                id: wifiMod
+                                width: 225
+                                height: 70
+                                onClicked: {
+                                    root.showingWifiNetworks = true
+                                }
+                            }
+
+                            BluetoothModule {
+                                id: bluetoothMod
+                                width: 225
+                                height: 70
+                                
+                                onClicked: {
+                                    root.showingBluetoothDevices = true
+                                }
+                            }
+                        }
+
+                        // Module Luminosité Laptop
+                        BrightnessModule {
+                            id: brightnessLaptop
+                            width: 450
+                            anchors.horizontalCenter: parent.horizontalCenter
+                            displayName: "Display"
+                            deviceName: ""
+                            onInteractionStarted: hoverTimer.stop()
+                        }
+                        
+                        // Module Luminosité ScreenPad
+                        BrightnessModule {
+                            id: brightnessScreenpad
+                            width: 450
+                            anchors.horizontalCenter: parent.horizontalCenter
+                            displayName: "ScreenPad"
+                            deviceName: "asus_screenpad"
+                            onInteractionStarted: hoverTimer.stop()
+                        }
+                        
+                        // Module Volume
+                        VolumeModule {
+                            id: volumeMod
+                            width: 450
+                            anchors.horizontalCenter: parent.horizontalCenter
+                            onInteractionStarted: hoverTimer.stop()
+                        }
+                    }
+                }
+                
+                // Container 2: Performance
+                Item {
+                    width: 460
+                    height: contentViewport.height
+                    
+                    PerformanceContainer {
+                        id: performanceContainer
+                        anchors.top: parent.top
+                        anchors.horizontalCenter: parent.horizontalCenter
+                    }
+                }
             }
         }
         
