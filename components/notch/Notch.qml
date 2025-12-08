@@ -4,7 +4,7 @@ import Quickshell.Io
 import Quickshell.Hyprland
 import "../controlcenter/modules"
 import "../bar/modules"
-import "../testcontainer"
+import "../performance"
 import "modules"
 
 Item {
@@ -33,7 +33,7 @@ Item {
     property bool startupLock: true
 
     // Navigation entre conteneurs
-    property var containers: ["Control Center", "Test Container"]
+    property var containers: ["Control Center", "Performance"]
     property int currentContainerIndex: 0
     property string currentContainerTitle: containers[currentContainerIndex]
 
@@ -621,10 +621,10 @@ Item {
         }
         
         // ==================================================
-        // TEST CONTAINER (EXPANDED MODE - Index 1)
+        // PERFORMANCE CONTAINER (EXPANDED MODE - Index 1)
         // ==================================================
-        TestContainer {
-            id: testContainer
+        PerformanceContainer {
+            id: performanceContainer
             anchors.top: parent.top
             anchors.topMargin: 55
             anchors.horizontalCenter: parent.horizontalCenter
@@ -635,7 +635,7 @@ Item {
                 NumberAnimation { duration: 300; easing.type: Easing.OutCubic } 
             }
 
-            // Afficher uniquement si on est sur Test Container
+            // Afficher uniquement si on est sur Performance
             visible: root.currentContainerIndex === 1 && opacity > 0
         }
         
