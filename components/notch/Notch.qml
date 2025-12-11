@@ -24,6 +24,7 @@ Item {
     property int hoverTriggerWidth: 150 
 
     property bool hovered: false
+    property bool isLocked: false  // Verrouiller l'état expanded
     property bool isInteractingWithModules: false
     property bool showingBluetoothDevices: false  // Affichage de la liste Bluetooth
     property bool showingWifiNetworks: false      // Affichage de la liste Wi‑Fi
@@ -53,14 +54,17 @@ Item {
         interval: 150  // Petit délai pour éviter fermeture trop brusque
         repeat: false
         onTriggered: {
-            root.hovered = false
-            // Reset le showingBluetoothDevices quand on quitte complètement
-            root.showingBluetoothDevices = false
-            // Reset le showingWifiNetworks quand on quitte complètement
-            root.showingWifiNetworks = false
-            
-            // Reset container to default
-            root.currentContainerIndex = 0
+            // Ne pas fermer si verrouillé
+            if (!root.isLocked) {
+                root.hovered = false
+                // Reset le showingBluetoothDevices quand on quitte complètement
+                root.showingBluetoothDevices = false
+                // Reset le showingWifiNetworks quand on quitte complètement
+                root.showingWifiNetworks = false
+                
+                // Reset container to default
+                root.currentContainerIndex = 0
+            }
         }
     }
 
@@ -105,8 +109,8 @@ Item {
                 }
             }
             onExited: {
-                // Ne redémarre le timer que si on n'est pas dans le rectangle principal
-                if (!globalHoverArea.containsMouse) {
+                // Ne redémarre le timer que si on n'est pas dans le rectangle principal et pas verrouillé
+                if (!globalHoverArea.containsMouse && !root.isLocked) {
                     hoverTimer.restart()
                 }
             }
@@ -510,6 +514,147 @@ Item {
                     }
                 }
             }
+            
+            // Bouton cadenas (Lock/Unlock)
+            Rectangle {
+                anchors.right: parent.right
+                anchors.rightMargin: 15
+                anchors.top: parent.top
+                anchors.topMargin: 15
+                width: 32
+                height: 32
+                radius: 16
+                color: root.isLocked ? "#50FFFFFF" : "#302a2a2a"
+                border.color: "#30FFFFFF"
+                border.width: 1
+                
+                Behavior on color { ColorAnimation { duration: 200 } }
+                
+                Canvas {
+                    id: lockIcon
+                    anchors.centerIn: parent
+                    width: 16
+                    height: 18
+                    
+                    onPaint: {
+                        var ctx = getContext("2d")
+                        ctx.clearRect(0, 0, width, height)
+                        ctx.strokeStyle = root.isLocked ? "#000000" : "#FFFFFF"
+                        ctx.fillStyle = root.isLocked ? "#000000" : "#FFFFFF"
+                        ctx.lineWidth = 1.5
+                        ctx.lineCap = "round"
+                        
+                        // Corps du cadenas (rectangle arrondi)
+                        var bodyX = width * 0.2
+                        var bodyY = height * 0.45
+                        var bodyWidth = width * 0.6
+                        var bodyHeight = height * 0.5
+                        var bodyRadius = 2
+                        
+                        ctx.beginPath()
+                        ctx.moveTo(bodyX + bodyRadius, bodyY)
+                        ctx.lineTo(bodyX + bodyWidth - bodyRadius, bodyY)
+                        ctx.arcTo(bodyX + bodyWidth, bodyY, bodyX + bodyWidth, bodyY + bodyRadius, bodyRadius)
+                        ctx.lineTo(bodyX + bodyWidth, bodyY + bodyHeight - bodyRadius)
+                        ctx.arcTo(bodyX + bodyWidth, bodyY + bodyHeight, bodyX + bodyWidth - bodyRadius, bodyY + bodyHeight, bodyRadius)
+                        ctx.lineTo(bodyX + bodyRadius, bodyY + bodyHeight)
+                        ctx.arcTo(bodyX, bodyY + bodyHeight, bodyX, bodyY + bodyHeight - bodyRadius, bodyRadius)
+                        ctx.lineTo(bodyX, bodyY + bodyRadius)
+                        ctx.arcTo(bodyX, bodyY, bodyX + bodyRadius, bodyY, bodyRadius)
+                        ctx.closePath()
+                        ctx.fill()
+                        
+                        if (root.isLocked) {
+                            // Anse fermée
+                            var arcCenterX = width / 2
+                            var arcCenterY = bodyY
+                            var arcRadius = width * 0.25
+                            
+                            ctx.beginPath()
+                            ctx.arc(arcCenterX, arcCenterY, arcRadius, Math.PI, 0, false)
+                            ctx.stroke()
+                            
+                            // Ligne verticale gauche
+                            ctx.beginPath()
+                            ctx.moveTo(arcCenterX - arcRadius, arcCenterY)
+                            ctx.lineTo(arcCenterX - arcRadius, bodyY)
+                            ctx.stroke()
+                            
+                            // Ligne verticale droite
+                            ctx.beginPath()
+                            ctx.moveTo(arcCenterX + arcRadius, arcCenterY)
+                            ctx.lineTo(arcCenterX + arcRadius, bodyY)
+                            ctx.stroke()
+                        } else {
+                            // Anse ouverte (décalée vers la droite)
+                            var openArcCenterX = width / 2 + width * 0.15
+                            var openArcCenterY = bodyY - height * 0.1
+                            var openArcRadius = width * 0.25
+                            
+                            ctx.beginPath()
+                            ctx.arc(openArcCenterX, openArcCenterY, openArcRadius, Math.PI * 0.75, Math.PI * 0.1, false)
+                            ctx.stroke()
+                            
+                            // Ligne verticale gauche seulement
+                            ctx.beginPath()
+                            ctx.moveTo(width * 0.32, bodyY - height * 0.03)
+                            ctx.lineTo(width * 0.32, bodyY)
+                            ctx.stroke()
+                        }
+                        
+                        // Trou de serrure
+                        var keyholeCenterX = width / 2
+                        var keyholeCenterY = bodyY + bodyHeight * 0.4
+                        var keyholeRadius = width * 0.08
+                        
+                        ctx.fillStyle = root.isLocked ? "#FFFFFF" : "#000000"
+                        ctx.beginPath()
+                        ctx.arc(keyholeCenterX, keyholeCenterY, keyholeRadius, 0, Math.PI * 2)
+                        ctx.fill()
+                        
+                        // Fente de la serrure
+                        var slitWidth = width * 0.05
+                        var slitHeight = bodyHeight * 0.3
+                        ctx.fillRect(keyholeCenterX - slitWidth / 2, keyholeCenterY + keyholeRadius / 2, slitWidth, slitHeight)
+                    }
+                    
+                    Connections {
+                        target: root
+                        function onIsLockedChanged() {
+                            lockIcon.requestPaint()
+                        }
+                    }
+                    
+                    Component.onCompleted: requestPaint()
+                }
+                
+                MouseArea {
+                    anchors.fill: parent
+                    hoverEnabled: true
+                    cursorShape: Qt.PointingHandCursor
+                    
+                    onClicked: {
+                        root.isLocked = !root.isLocked
+                        if (root.isLocked) {
+                            // Si on verrouille, forcer l'état expanded
+                            root.hovered = true
+                            hoverTimer.stop()
+                        }
+                    }
+                    
+                    onEntered: {
+                        parent.scale = 1.1
+                    }
+                    
+                    onExited: {
+                        parent.scale = 1.0
+                    }
+                }
+                
+                Behavior on scale {
+                    NumberAnimation { duration: 150; easing.type: Easing.OutCubic }
+                }
+            }
         }
 
         // ==================================================
@@ -638,7 +783,9 @@ Item {
             }
             
             onExited: {
-                hoverTimer.restart()
+                if (!root.isLocked) {
+                    hoverTimer.restart()
+                }
             }
         }
         
