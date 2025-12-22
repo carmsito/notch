@@ -220,12 +220,25 @@ Item {
                             spacing: 2
                             width: parent.width - 80
                             
-                            Text {
-                                text: modelData.name || "Unknown Device"
-                                color: "white"
-                                font.pixelSize: 12
-                                elide: Text.ElideRight
+                            Row {
                                 width: parent.width
+                                spacing: 6
+                                Text {
+                                    text: modelData.name || "Unknown Device"
+                                    color: "white"
+                                    font.pixelSize: 12
+                                    elide: Text.ElideRight
+                                    width: parent.width - (deviceInfo.connected ? 60 : 0)
+                                }
+                                Item { width: 1; height: 1 }
+                                Text {
+                                    text: deviceInfo.connected ? "connected" : ""
+                                    color: "#00FF99"
+                                    font.pixelSize: 12
+                                    visible: deviceInfo.connected
+                                    horizontalAlignment: Text.AlignRight
+                                    width: 60
+                                }
                             }
                             
                             // Batterie si disponible

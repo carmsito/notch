@@ -5,6 +5,7 @@ import Quickshell.Hyprland
 import "../controlcenter/modules"
 import "../bar/modules"
 import "../performance"
+import "../notification"
 import "modules"
 
 Item {
@@ -33,7 +34,7 @@ Item {
     property bool startupLock: true
 
     // Navigation entre conteneurs
-    property var containers: ["Control Center", "Performance"]
+    property var containers: ["Control Center", "Performance", "Notifications"]
     property int currentContainerIndex: 0
     property string currentContainerTitle: containers[currentContainerIndex]
 
@@ -755,6 +756,17 @@ Item {
                         id: performanceContainer
                         anchors.top: parent.top
                         anchors.horizontalCenter: parent.horizontalCenter
+                    }
+                }
+
+                // Container 3: Notifications
+                Item {
+                    width: 460
+                    height: contentViewport.height
+                    
+                    NotificationPanel {
+                        anchors.fill: parent
+                        anchors.margins: 5
                     }
                 }
             }

@@ -1,12 +1,14 @@
 import QtQuick
 import QtQuick.Controls
 import QtQuick.Layouts
+import "../notification"
+import "modules"
 
 Item {
     id: root
     
     property int currentPage: 0
-    property var pages: ["Wi-Fi", "Test"]
+    property var pages: ["Wi-Fi", "Test", "Notifications"]
     
     signal closeRequested()
     
@@ -117,6 +119,13 @@ Item {
                         Layout.topMargin: 20
                     }
                 }
+            }
+        }
+
+        // Page 3: Notifications
+        Item {
+            NotificationPanel {
+                anchors.fill: parent
             }
         }
     }
