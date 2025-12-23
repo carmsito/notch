@@ -183,6 +183,23 @@ Rectangle {
                     preventStealing: true // Empêche le PathView de voler le drag
                     
                     property real value: 1.0
+                    // Ajout du contrôle par scroll
+                    onWheel: {
+                        var step = 5;
+                        if (wheel.angleDelta.y > 0) {
+                            value = Math.min(1, value + step / 100);
+                        } else if (wheel.angleDelta.y < 0) {
+                            value = Math.max(0, value - step / 100);
+                        }
+                        var newBrightness = Math.round(value * 100);
+                        root.brightnessLevel = newBrightness;
+                        var cmd = "dev=\"\"; ";
+                        cmd += "if [ \"" + root.deviceName + "\" != \"\" ]; then dev=\"" + root.deviceName + "\"; else ";
+                        cmd += "dev=$(ls /sys/class/backlight 2>/dev/null | grep -Ev 'screen|screenpad' | head -n1); if [ -z \"$dev\" ]; then dev=$(ls /sys/class/backlight 2>/dev/null | head -n1); fi; fi; ";
+                        cmd += "if [ -n \"$dev\" ]; then brightnessctl -d \"$dev\" s " + newBrightness + "% 2>/dev/null; else brightnessctl s " + newBrightness + "% 2>/dev/null || light -S " + newBrightness + " 2>/dev/null; fi";
+                        setBrightness.command = ["sh", "-c", cmd];
+                        setBrightness.running = true;
+                    }
                     
                     onEntered: {
                         root.interactionStarted()

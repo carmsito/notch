@@ -291,6 +291,35 @@ Rectangle {
                     preventStealing: true // Empêche le PathView de voler le drag
                     
                     property real value: 0.5
+                    // Ajout du contrôle par scroll
+                    onWheel: {
+                        var step = 5;
+                        if (wheel.angleDelta.y > 0) {
+                            value = Math.min(1, value + step / 100);
+                        } else if (wheel.angleDelta.y < 0) {
+                            value = Math.max(0, value - step / 100);
+                        }
+                        var newVolume = Math.round(value * 100);
+                        root.volumeLevel = newVolume;
+                        root.lastKnownVolume = newVolume;
+                        var nodeId = root.targetNode !== "" ? root.targetNode : "";
+                        if (nodeId !== "") {
+                            var volumeValue = (newVolume / 100).toFixed(2);
+                            setVolume.command = ["wpctl", "set-volume", nodeId, volumeValue];
+                            setVolume.running = true;
+                        } else {
+                            setVolume.command = ["sh", "-c", "pactl set-sink-volume @DEFAULT_SINK@ " + newVolume + "%"];
+                            setVolume.running = true;
+                        }
+                        if (root.isMuted && newVolume > 0) {
+                            if (nodeId !== "") {
+                                unmuteVolume.command = ["sh", "-c", "wpctl set-mute " + nodeId + " 0"];
+                            } else {
+                                unmuteVolume.command = ["sh", "-c", "pactl set-sink-mute @DEFAULT_SINK@ 0"];
+                            }
+                            unmuteVolume.running = true;
+                        }
+                    }
                     
                     onEntered: {
                         root.interactionStarted()
