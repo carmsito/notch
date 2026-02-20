@@ -29,14 +29,41 @@ Item {
     property bool isInteractingWithModules: false
     property bool showingBluetoothDevices: false  // Affichage de la liste Bluetooth
     property bool showingWifiNetworks: false      // Affichage de la liste Wi‑Fi
+    property bool showingSoundCenter: false       // Rubrique son avancée
     property bool needsKeyboardFocus: false       // Pour demander le focus clavier
+    property var monitorStates: ({})
+    property string hostMonitorName: ""
     // Empêche le hover initial de s'activer au démarrage (barre démarre compacte)
     property bool startupLock: true
+
+    signal monitorToggled(string monitorName, bool enabled)
+
+    function isPrimaryMonitor(monitorName) {
+        return monitorName === "eDP-1" || monitorName === "eDP-2"
+    }
+
+    function isMonitorEnabled(monitorName) {
+        if (isPrimaryMonitor(monitorName)) {
+            return true
+        }
+
+        if (!monitorStates) {
+            return true
+        }
+
+        var state = monitorStates[monitorName]
+        return state === undefined ? true : state
+    }
 
     // Navigation entre conteneurs
     property var containers: ["Control Center", "Performance", "Notifications"]
     property int currentContainerIndex: 0
     property string currentContainerTitle: containers[currentContainerIndex]
+    onCurrentContainerIndexChanged: {
+        if (currentContainerIndex !== 0) {
+            showingSoundCenter = false
+        }
+    }
 
     implicitHeight: hoverStrip.height + notchRect.height
 
@@ -62,6 +89,8 @@ Item {
                 root.showingBluetoothDevices = false
                 // Reset le showingWifiNetworks quand on quitte complètement
                 root.showingWifiNetworks = false
+                // Reset le panneau son avancé
+                root.showingSoundCenter = false
                 
                 // Reset container to default
                 root.currentContainerIndex = 0
@@ -408,7 +437,7 @@ Item {
             height: 70
             color: "transparent"
             
-            opacity: root.hovered && !root.showingBluetoothDevices && !root.showingWifiNetworks ? 1 : 0
+            opacity: root.hovered && !root.showingBluetoothDevices && !root.showingWifiNetworks && !root.showingSoundCenter ? 1 : 0
             visible: opacity > 0
             
             Behavior on opacity { 
@@ -670,7 +699,7 @@ Item {
             height: parent.height - 70
             clip: true
             
-            opacity: root.hovered && !root.showingBluetoothDevices && !root.showingWifiNetworks ? 1 : 0
+            opacity: root.hovered && !root.showingBluetoothDevices && !root.showingWifiNetworks && !root.showingSoundCenter ? 1 : 0
             visible: opacity > 0
             
             Behavior on opacity { NumberAnimation { duration: 300; easing.type: Easing.OutCubic } }
@@ -702,6 +731,7 @@ Item {
                                 width: 225
                                 height: 70
                                 onClicked: {
+                                    root.showingSoundCenter = false
                                     root.showingWifiNetworks = true
                                 }
                             }
@@ -712,6 +742,7 @@ Item {
                                 height: 70
                                 
                                 onClicked: {
+                                    root.showingSoundCenter = false
                                     root.showingBluetoothDevices = true
                                 }
                             }
@@ -736,13 +767,19 @@ Item {
                             deviceName: "asus_screenpad"
                             onInteractionStarted: hoverTimer.stop()
                         }
-                        
-                        // Module Volume
+
+                        // Module Volume direct (ouvre le panneau avancé hors slider)
                         VolumeModule {
                             id: volumeMod
                             width: 450
                             anchors.horizontalCenter: parent.horizontalCenter
                             onInteractionStarted: hoverTimer.stop()
+                            onAdvancedRequested: {
+                                root.showingBluetoothDevices = false
+                                root.showingWifiNetworks = false
+                                root.showingSoundCenter = true
+                                hoverTimer.stop()
+                            }
                         }
                     }
                 }
@@ -755,7 +792,138 @@ Item {
                     PerformanceContainer {
                         id: performanceContainer
                         anchors.top: parent.top
+                        anchors.topMargin: 2
                         anchors.horizontalCenter: parent.horizontalCenter
+                    }
+
+                    Rectangle {
+                        id: performanceMonitorSwitchBar
+                        anchors.horizontalCenter: parent.horizontalCenter
+                        anchors.top: performanceContainer.bottom
+                        anchors.topMargin: 10
+                        width: 440
+                        height: 36
+                        radius: 18
+                        color: "#2f151515"
+                        border.color: "#35FFFFFF"
+                        border.width: 1
+
+                        Flickable {
+                            id: performanceMonitorFlick
+                            anchors.fill: parent
+                            anchors.leftMargin: 10
+                            anchors.rightMargin: 10
+                            clip: true
+                            boundsBehavior: Flickable.StopAtBounds
+                            contentWidth: performanceMonitorChipRow.width
+                            contentHeight: performanceMonitorChipRow.height
+                            flickableDirection: Flickable.HorizontalFlick
+                            interactive: contentWidth > width
+
+                            Row {
+                                id: performanceMonitorChipRow
+                                spacing: 8
+                                anchors.verticalCenter: parent.verticalCenter
+
+                                Repeater {
+                                    model: Quickshell.screens
+
+                                    Rectangle {
+                                        required property var modelData
+
+                                        property string monitorName: modelData && modelData.name ? modelData.name : "unknown"
+                                        property bool primaryMonitor: root.isPrimaryMonitor(monitorName)
+                                        property bool monitorEnabled: root.isMonitorEnabled(monitorName)
+                                        property bool currentMonitor: monitorName === root.hostMonitorName
+
+                                        height: 24
+                                        width: chipContent.implicitWidth + 16
+                                        radius: 12
+                                        color: primaryMonitor ? "#3a4a4a4a" : (monitorEnabled ? "#65FFFFFF" : "#25202020")
+                                        border.color: currentMonitor ? "#90A8D0FF" : (monitorEnabled ? "#82FFFFFF" : "#45FFFFFF")
+                                        border.width: 1
+
+                                        Behavior on color { ColorAnimation { duration: 150 } }
+                                        Behavior on border.color { ColorAnimation { duration: 150 } }
+
+                                        Row {
+                                            id: chipContent
+                                            anchors.centerIn: parent
+                                            spacing: 6
+
+                                            Item {
+                                                width: primaryMonitor ? 10 : 8
+                                                height: 12
+
+                                                Rectangle {
+                                                    visible: primaryMonitor
+                                                    x: 2
+                                                    y: 0
+                                                    width: 6
+                                                    height: 5
+                                                    radius: 2
+                                                    color: "transparent"
+                                                    border.color: "#D9D9D9"
+                                                    border.width: 1
+                                                }
+
+                                                Rectangle {
+                                                    visible: primaryMonitor
+                                                    x: 1
+                                                    y: 4
+                                                    width: 8
+                                                    height: 7
+                                                    radius: 2
+                                                    color: "#D9D9D9"
+                                                }
+
+                                                Rectangle {
+                                                    visible: !primaryMonitor
+                                                    anchors.centerIn: parent
+                                                    width: 8
+                                                    height: 8
+                                                    radius: 4
+                                                    color: monitorEnabled ? "#81E08D" : "#6A6A6A"
+                                                }
+                                            }
+
+                                            Text {
+                                                text: monitorName
+                                                color: primaryMonitor ? "#E2E2E2" : (monitorEnabled ? "#111111" : "#D9D9D9")
+                                                font.pixelSize: 12
+                                                font.bold: true
+                                                font.family: "SF Pro Display"
+                                            }
+                                        }
+
+                                        MouseArea {
+                                            anchors.fill: parent
+                                            enabled: !primaryMonitor
+                                            hoverEnabled: true
+                                            cursorShape: enabled ? Qt.PointingHandCursor : Qt.ArrowCursor
+
+                                            onClicked: {
+                                                root.monitorToggled(monitorName, !monitorEnabled)
+                                            }
+
+                                            onEntered: {
+                                                if (enabled) {
+                                                    parent.scale = 1.04
+                                                }
+                                            }
+
+                                            onExited: {
+                                                parent.scale = 1.0
+                                            }
+                                        }
+
+                                        Behavior on scale {
+                                            NumberAnimation { duration: 120; easing.type: Easing.OutCubic }
+                                        }
+                                    }
+                                }
+                            }
+                        }
                     }
                 }
 
@@ -771,7 +939,7 @@ Item {
                 }
             }
         }
-        
+
         // MouseArea invisible par-dessus TOUT pour maintenir le hover
         // Laisse passer les clics mais capture le hover
         MouseArea {
@@ -849,6 +1017,30 @@ Item {
             // Propager l'état du focus clavier
             onIsEnteringPasswordChanged: {
                 root.needsKeyboardFocus = isEnteringPassword
+            }
+        }
+
+        SoundCenterPanel {
+            id: soundCenterPanel
+            anchors.fill: parent
+            anchors.topMargin: 12
+            anchors.bottomMargin: 12
+            anchors.leftMargin: 12
+            anchors.rightMargin: 12
+
+            opacity: root.hovered && root.showingSoundCenter ? 1 : 0
+            visible: root.currentContainerIndex === 0 && opacity > 0
+
+            Behavior on opacity {
+                NumberAnimation { duration: 300; easing.type: Easing.OutCubic }
+            }
+
+            onInteractionStarted: {
+                hoverTimer.stop()
+            }
+
+            onClose: {
+                root.showingSoundCenter = false
             }
         }
     }

@@ -11,13 +11,19 @@ Rectangle {
     property int volumeLevel: 50
     property bool isMuted: false
     property int lastKnownVolume: 50  // Pour calculer la différence
-    // Optionnel: node/stream id à contrôler (laisser vide pour fallback pactl)
-    property string targetNode: ""
-    // Compteur de tentatives de détection
-    property int detectionAttempts: 0
-
     signal interactionStarted()
     signal interactionEnded()
+    signal advancedRequested()
+
+    function sinkResolvePrefix() {
+        return "target=$(pactl list short sinks 2>/dev/null | awk '$2==\"global-audio\" {print $2; exit}'); " +
+               "if [ -z \"$target\" ]; then " +
+               "target=$(pactl list short sinks 2>/dev/null | awk '$2==\"global_audio\" {print $2; exit}'); " +
+               "fi; " +
+               "if [ -z \"$target\" ]; then " +
+               "target=$(pactl list sinks 2>/dev/null | awk -v RS='' -F'\\n' '{name=\"\"; desc=\"\"; for(i=1;i<=NF;i++){line=$i; sub(/^[[:space:]]+/,\"\",line); if(line ~ /^Name: /){name=substr(line,7)} else if(line ~ /^Description: /){desc=substr(line,14)}} if(name!=\"\" && (tolower(name) ~ /global[-_ ]audio/ || tolower(desc) ~ /global[-_ ]audio/)){print name; exit}}'); " +
+               "fi; "
+    }
 
     color: isActive ? "#60404040" : "#50404040"
     border.color: "#30FFFFFF"
@@ -25,11 +31,11 @@ Rectangle {
 
     Behavior on color { ColorAnimation { duration: 150 } }
 
-    // Lecture du volume actuel (global / node)
+    // Lecture du volume actuel (global-audio en priorité)
     Process {
         id: getVolume
         running: false
-        command: ["sh", "-c", (root.targetNode !== "" ? ("wpctl get-volume " + root.targetNode + " | awk '{print int($2 * 100)}'") : "pactl get-sink-volume @DEFAULT_SINK@ | head -n1 | awk -F'/' '{gsub(/[^0-9]/,\"\",$2); print $2}'")]
+        command: ["sh", "-c", root.sinkResolvePrefix() + "if [ -n \"$target\" ]; then pactl get-sink-volume \"$target\" | head -n1 | awk -F'/' '{gsub(/[^0-9]/,\"\",$2); print $2}'; fi"]
         stdout: StdioCollector {
             onStreamFinished: {
                 var trimmed = (this.text || "").trim();
@@ -38,30 +44,19 @@ Rectangle {
                     root.volumeLevel = vol;
                     root.lastKnownVolume = vol;
                     sliderMouse.value = vol / 100;
-                } else if (root.targetNode !== "") {
-                    console.log("VolumeModule: empty volume read, clearing targetNode and retrying detection");
-                    root.targetNode = "";
-                    detectRetryTimer.running = true;
-                    detectAudioProc.running = true;
                 }
             }
         }
         onExited: {
-            if (exitCode !== 0 && root.targetNode !== "") {
-                console.log("VolumeModule: getVolume error (" + exitCode + "), resetting targetNode and scheduling detection");
-                root.targetNode = "";
-                detectRetryTimer.running = true;
-                detectAudioProc.running = true;
-            }
             running = false;
         }
     }
 
-    // Lecture mute
+    // Lecture mute (global-audio en priorité)
     Process {
         id: getMuteStatus
         running: false
-        command: ["sh", "-c", (root.targetNode !== "" ? ("wpctl get-volume " + root.targetNode + " | grep -q MUTED && echo 1 || echo 0") : "pactl get-sink-mute @DEFAULT_SINK@ | awk '{print ($2==\"yes\"?1:0)}' ")]
+        command: ["sh", "-c", root.sinkResolvePrefix() + "if [ -n \"$target\" ]; then pactl get-sink-mute \"$target\" | awk '{print ($2==\"yes\"?1:0)}'; else echo 0; fi "]
         stdout: StdioCollector {
             onStreamFinished: {
                 var trimmed = (this.text || "").trim();
@@ -69,12 +64,6 @@ Rectangle {
             }
         }
         onExited: {
-            if (exitCode !== 0 && root.targetNode !== "") {
-                console.log("VolumeModule: getMuteStatus error (" + exitCode + "), resetting targetNode and retrying detection");
-                root.targetNode = "";
-                detectRetryTimer.running = true;
-                detectAudioProc.running = true;
-            }
             running = false;
         }
     }
@@ -96,54 +85,8 @@ Rectangle {
         // Lire le volume immédiatement au démarrage
         getVolume.running = true;
         getMuteStatus.running = true;
-        // Lancer la détection du node en parallèle
-        detectAudioProc.running = true;
     }
 
-    // Retry detection tant que pas d'ID
-    Timer {
-        id: detectRetryTimer
-        interval: 2500
-        repeat: true
-        running: true
-        onTriggered: {
-            if (root.targetNode === "") {
-                console.log("VolumeModule: retrying audio node detection (#" + (root.detectionAttempts + 1) + ")");
-                detectAudioProc.running = true;
-            } else {
-                running = false;
-            }
-        }
-    }
-
-    Process {
-        id: detectAudioProc
-        running: false
-        command: ["sh", "-c",
-                  "sink=$(pactl info 2>/dev/null | awk -F': ' '/Default Sink/ {print $2}'); " +
-                  "if [ -n \"$sink\" ]; then " +
-                  "wpctl status 2>/dev/null | awk -v s=\"$sink\" '$0 ~ s && $1 ~ /^[[:space:]]*[0-9]+\./ {gsub(/\..*/, \"\", $1); gsub(/^[[:space:]]*/, \"\", $1); print $1; exit}' | head -n1; " +
-                  "fi"
-        ]
-        stdout: StdioCollector {
-            onStreamFinished: {
-                var out = this.text ? this.text.trim() : "";
-                if (out && out !== "") {
-                    console.log("VolumeModule: detected audio node id:", out);
-                    root.targetNode = out;
-                    detectRetryTimer.running = false;
-                } else {
-                    console.log("VolumeModule: no audio node detected, using pactl fallback");
-                    root.targetNode = "";
-                    detectRetryTimer.running = true;
-                }
-                root.detectionAttempts += 1;
-                getVolume.running = true;
-                getMuteStatus.running = true;
-            }
-        }
-    }
-    
     MouseArea {
         anchors.fill: parent
         hoverEnabled: true
@@ -155,7 +98,14 @@ Rectangle {
         onExited: {
             root.isActive = false
         }
-        onPressed: mouse.accepted = false
+        onClicked: {
+            var localToSlider = mapToItem(sliderMouse, mouse.x, mouse.y)
+            var inSliderBounds = localToSlider.x >= 0 && localToSlider.x <= sliderMouse.width &&
+                                 localToSlider.y >= 0 && localToSlider.y <= sliderMouse.height
+            if (!inSliderBounds) {
+                root.advancedRequested()
+            }
+        }
     }
     
     // Disposition: Icône volume bas - Slider - Icône volume haut
@@ -302,21 +252,10 @@ Rectangle {
                         var newVolume = Math.round(value * 100);
                         root.volumeLevel = newVolume;
                         root.lastKnownVolume = newVolume;
-                        var nodeId = root.targetNode !== "" ? root.targetNode : "";
-                        if (nodeId !== "") {
-                            var volumeValue = (newVolume / 100).toFixed(2);
-                            setVolume.command = ["wpctl", "set-volume", nodeId, volumeValue];
-                            setVolume.running = true;
-                        } else {
-                            setVolume.command = ["sh", "-c", "pactl set-sink-volume @DEFAULT_SINK@ " + newVolume + "%"];
-                            setVolume.running = true;
-                        }
+                        setVolume.command = ["sh", "-c", root.sinkResolvePrefix() + "if [ -n \"$target\" ]; then pactl set-sink-volume \"$target\" " + newVolume + "%; fi"];
+                        setVolume.running = true;
                         if (root.isMuted && newVolume > 0) {
-                            if (nodeId !== "") {
-                                unmuteVolume.command = ["sh", "-c", "wpctl set-mute " + nodeId + " 0"];
-                            } else {
-                                unmuteVolume.command = ["sh", "-c", "pactl set-sink-mute @DEFAULT_SINK@ 0"];
-                            }
+                            unmuteVolume.command = ["sh", "-c", root.sinkResolvePrefix() + "if [ -n \"$target\" ]; then pactl set-sink-mute \"$target\" 0; fi"];
                             unmuteVolume.running = true;
                         }
                     }
@@ -354,27 +293,14 @@ Rectangle {
                         root.volumeLevel = newVolume;
                         root.lastKnownVolume = newVolume;
                         
-                        // Appliquer sur le node cible (ou ID 38 par défaut) avec valeur absolue (0.00 à 1.00)
-                        var nodeId = root.targetNode !== "" ? root.targetNode : "";
-                        if (nodeId !== "") {
-                            var volumeValue = (newVolume / 100).toFixed(2);
-                            setVolume.command = ["wpctl", "set-volume", nodeId, volumeValue];
-                            console.log("VolumeModule: Command = wpctl set-volume", nodeId, volumeValue);
-                            setVolume.running = true;
-                        } else {
-                            // Use pactl on default sink
-                            setVolume.command = ["sh", "-c", "pactl set-sink-volume @DEFAULT_SINK@ " + newVolume + "%"];
-                            console.log("VolumeModule: Command = pactl set-sink-volume @DEFAULT_SINK@", newVolume + "%");
-                            setVolume.running = true;
-                        }
+                        // Appliquer directement sur global-audio (fallback défaut si absent)
+                        setVolume.command = ["sh", "-c", root.sinkResolvePrefix() + "if [ -n \"$target\" ]; then pactl set-sink-volume \"$target\" " + newVolume + "%; fi"];
+                        console.log("VolumeModule: Command = pactl set-sink-volume <global-audio>", newVolume + "%");
+                        setVolume.running = true;
 
                         // Unmute si on change le volume au-dessus de 0
                         if (root.isMuted && newVolume > 0) {
-                            if (nodeId !== "") {
-                                unmuteVolume.command = ["sh", "-c", "wpctl set-mute " + nodeId + " 0"];
-                            } else {
-                                unmuteVolume.command = ["sh", "-c", "pactl set-sink-mute @DEFAULT_SINK@ 0"];
-                            }
+                            unmuteVolume.command = ["sh", "-c", root.sinkResolvePrefix() + "if [ -n \"$target\" ]; then pactl set-sink-mute \"$target\" 0; fi"];
                             unmuteVolume.running = true;
                         }
                     }

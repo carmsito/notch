@@ -9,6 +9,33 @@ import "../notch"
 Scope {
     id: rootScope
     property bool forceHide: false
+    property var monitorEnabledStates: ({})
+
+    function isPrimaryMonitor(monitorName) {
+        return monitorName === "eDP-1" || monitorName === "eDP-2"
+    }
+
+    function isMonitorEnabled(monitorName) {
+        if (isPrimaryMonitor(monitorName)) {
+            return true
+        }
+
+        var state = monitorEnabledStates[monitorName]
+        return state === undefined ? true : state
+    }
+
+    function setMonitorEnabled(monitorName, enabled) {
+        if (isPrimaryMonitor(monitorName)) {
+            return
+        }
+
+        var nextState = {}
+        for (var key in monitorEnabledStates) {
+            nextState[key] = monitorEnabledStates[key]
+        }
+        nextState[monitorName] = enabled
+        monitorEnabledStates = nextState
+    }
 
 
 
@@ -21,6 +48,8 @@ Scope {
             required property var modelData
             
             property bool isFullscreen: false
+            property string monitorName: screenContainer.modelData.name
+            property bool notchEnabled: rootScope.isMonitorEnabled(screenContainer.monitorName)
 
             Process {
                 id: fullscreenListener
@@ -46,7 +75,7 @@ Scope {
                 id: hitboxPanel
                 screen: screenContainer.modelData
                 
-                visible: true
+                visible: screenContainer.notchEnabled
 
                 anchors {
                     top: true
@@ -57,7 +86,7 @@ Scope {
                 property int topGap: 48
 
                 implicitHeight: topGap
-                exclusiveZone: screenContainer.isFullscreen ? 0 : topGap
+                exclusiveZone: (screenContainer.notchEnabled && !screenContainer.isFullscreen) ? topGap : 0
 
                 color: "transparent"
                 mask: Region { }
@@ -86,7 +115,7 @@ Scope {
                 implicitHeight: 100
                 
                 property bool delayedVisible: false
-                visible: !screenContainer.isFullscreen && delayedVisible
+                visible: screenContainer.notchEnabled && !screenContainer.isFullscreen && delayedVisible
                 
                 Connections {
                     target: overlayPanel
@@ -120,6 +149,11 @@ Scope {
                     id: mainNotch
                     anchors.horizontalCenter: parent.horizontalCenter
                     anchors.top: parent.top
+                    monitorStates: rootScope.monitorEnabledStates
+                    hostMonitorName: screenContainer.monitorName
+                    onMonitorToggled: function(monitorName, enabled) {
+                        rootScope.setMonitorEnabled(monitorName, enabled)
+                    }
                 }
             }
 
@@ -141,7 +175,7 @@ Scope {
                 WlrLayershell.layer: WlrLayer.Overlay
                 WlrLayershell.keyboardFocus: WlrKeyboardFocus.OnDemand
 
-                visible: !screenContainer.isFullscreen && (mainNotch.hovered || overlayNotch.hovered)
+                visible: screenContainer.notchEnabled && !screenContainer.isFullscreen && (mainNotch.hovered || overlayNotch.hovered)
 
                 mask: Region { item: overlayNotch }
 
@@ -150,6 +184,11 @@ Scope {
                     anchors.horizontalCenter: parent.horizontalCenter
                     anchors.top: parent.top
                     hovered: overlayPanel.visible
+                    monitorStates: rootScope.monitorEnabledStates
+                    hostMonitorName: screenContainer.monitorName
+                    onMonitorToggled: function(monitorName, enabled) {
+                        rootScope.setMonitorEnabled(monitorName, enabled)
+                    }
                     
                     onNeedsKeyboardFocusChanged: {
                         if (needsKeyboardFocus) {
