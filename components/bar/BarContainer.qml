@@ -10,13 +10,81 @@ Scope {
     id: rootScope
     property bool forceHide: false
     property var monitorEnabledStates: ({})
+    property string monitorStatePath: Quickshell.statePath("notch_monitor_states.json")
+
+    FileView {
+        id: monitorStateFile
+        path: rootScope.monitorStatePath
+        preload: true
+        blockLoading: true
+        printErrors: false
+        onLoaded: rootScope.loadMonitorEnabledStates()
+        onFileChanged: rootScope.loadMonitorEnabledStates()
+    }
 
     function isPrimaryMonitor(monitorName) {
         return monitorName === "eDP-1" || monitorName === "eDP-2"
     }
 
+    function isExcludedFromPrimaryRule(monitorName) {
+        return (monitorName || "").toLowerCase() === "dp-1"
+    }
+
+    function hasEligibleExternalMonitor() {
+        var screens = Quickshell.screens
+        for (var i = 0; i < screens.length; i++) {
+            var name = screens[i] && screens[i].name ? screens[i].name : ""
+            if (!isPrimaryMonitor(name) && !isExcludedFromPrimaryRule(name)) {
+                return true
+            }
+        }
+        return false
+    }
+
+    function isPrimaryMonitorLocked(monitorName) {
+        return isPrimaryMonitor(monitorName) && !hasEligibleExternalMonitor()
+    }
+
+    function sanitizeMonitorState(value) {
+        var cleaned = {}
+        if (!value || typeof value !== "object") {
+            return cleaned
+        }
+
+        for (var key in value) {
+            if (typeof value[key] === "boolean") {
+                cleaned[key] = value[key]
+            }
+        }
+        return cleaned
+    }
+
+    function loadMonitorEnabledStates() {
+        try {
+            var raw = monitorStateFile.text()
+            if (!raw || raw.trim() === "") {
+                monitorEnabledStates = ({})
+                return
+            }
+
+            var parsed = JSON.parse(raw)
+            monitorEnabledStates = sanitizeMonitorState(parsed)
+        } catch (error) {
+            console.warn("Failed to load monitor states:", error)
+            monitorEnabledStates = ({})
+        }
+    }
+
+    function saveMonitorEnabledStates() {
+        try {
+            monitorStateFile.setText(JSON.stringify(monitorEnabledStates))
+        } catch (error) {
+            console.warn("Failed to save monitor states:", error)
+        }
+    }
+
     function isMonitorEnabled(monitorName) {
-        if (isPrimaryMonitor(monitorName)) {
+        if (isPrimaryMonitorLocked(monitorName)) {
             return true
         }
 
@@ -25,7 +93,7 @@ Scope {
     }
 
     function setMonitorEnabled(monitorName, enabled) {
-        if (isPrimaryMonitor(monitorName)) {
+        if (isPrimaryMonitorLocked(monitorName)) {
             return
         }
 
@@ -35,6 +103,11 @@ Scope {
         }
         nextState[monitorName] = enabled
         monitorEnabledStates = nextState
+        saveMonitorEnabledStates()
+    }
+
+    Component.onCompleted: {
+        loadMonitorEnabledStates()
     }
 
 

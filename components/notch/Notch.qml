@@ -42,8 +42,27 @@ Item {
         return monitorName === "eDP-1" || monitorName === "eDP-2"
     }
 
+    function isExcludedFromPrimaryRule(monitorName) {
+        return (monitorName || "").toLowerCase() === "dp-1"
+    }
+
+    function hasEligibleExternalMonitor() {
+        var screens = Quickshell.screens
+        for (var i = 0; i < screens.length; i++) {
+            var name = screens[i] && screens[i].name ? screens[i].name : ""
+            if (!isPrimaryMonitor(name) && !isExcludedFromPrimaryRule(name)) {
+                return true
+            }
+        }
+        return false
+    }
+
+    function isPrimaryMonitorLocked(monitorName) {
+        return isPrimaryMonitor(monitorName) && !hasEligibleExternalMonitor()
+    }
+
     function isMonitorEnabled(monitorName) {
-        if (isPrimaryMonitor(monitorName)) {
+        if (isPrimaryMonitorLocked(monitorName)) {
             return true
         }
 
@@ -816,14 +835,14 @@ Item {
                             clip: true
                             boundsBehavior: Flickable.StopAtBounds
                             contentWidth: performanceMonitorChipRow.width
-                            contentHeight: performanceMonitorChipRow.height
+                            contentHeight: Math.max(height, performanceMonitorChipRow.height)
                             flickableDirection: Flickable.HorizontalFlick
                             interactive: contentWidth > width
 
                             Row {
                                 id: performanceMonitorChipRow
                                 spacing: 8
-                                anchors.verticalCenter: parent.verticalCenter
+                                y: Math.round((parent.height - height) / 2)
 
                                 Repeater {
                                     model: Quickshell.screens
@@ -832,32 +851,36 @@ Item {
                                         required property var modelData
 
                                         property string monitorName: modelData && modelData.name ? modelData.name : "unknown"
-                                        property bool primaryMonitor: root.isPrimaryMonitor(monitorName)
+                                        property bool primaryLocked: root.isPrimaryMonitorLocked(monitorName)
                                         property bool monitorEnabled: root.isMonitorEnabled(monitorName)
                                         property bool currentMonitor: monitorName === root.hostMonitorName
 
                                         height: 24
-                                        width: chipContent.implicitWidth + 16
+                                        width: chipContent.width + 16
                                         radius: 12
-                                        color: primaryMonitor ? "#3a4a4a4a" : (monitorEnabled ? "#65FFFFFF" : "#25202020")
+                                        color: primaryLocked ? "#3a4a4a4a" : (monitorEnabled ? "#65FFFFFF" : "#25202020")
                                         border.color: currentMonitor ? "#90A8D0FF" : (monitorEnabled ? "#82FFFFFF" : "#45FFFFFF")
                                         border.width: 1
 
                                         Behavior on color { ColorAnimation { duration: 150 } }
                                         Behavior on border.color { ColorAnimation { duration: 150 } }
 
-                                        Row {
+                                        Item {
                                             id: chipContent
                                             anchors.centerIn: parent
-                                            spacing: 6
+                                            width: chipIndicator.width + 6 + chipLabel.implicitWidth
+                                            height: Math.max(chipIndicator.height, chipLabel.implicitHeight)
 
                                             Item {
-                                                width: primaryMonitor ? 10 : 8
-                                                height: 12
+                                                id: chipIndicator
+                                                width: primaryLocked ? 10 : 8
+                                                height: primaryLocked ? 12 : 8
+                                                anchors.left: parent.left
+                                                anchors.verticalCenter: parent.verticalCenter
 
                                                 Rectangle {
-                                                    visible: primaryMonitor
-                                                    x: 2
+                                                    visible: primaryLocked
+                                                    x: Math.round((parent.width - width) / 2)
                                                     y: 0
                                                     width: 6
                                                     height: 5
@@ -868,8 +891,8 @@ Item {
                                                 }
 
                                                 Rectangle {
-                                                    visible: primaryMonitor
-                                                    x: 1
+                                                    visible: primaryLocked
+                                                    x: Math.round((parent.width - width) / 2)
                                                     y: 4
                                                     width: 8
                                                     height: 7
@@ -878,7 +901,7 @@ Item {
                                                 }
 
                                                 Rectangle {
-                                                    visible: !primaryMonitor
+                                                    visible: !primaryLocked
                                                     anchors.centerIn: parent
                                                     width: 8
                                                     height: 8
@@ -888,8 +911,11 @@ Item {
                                             }
 
                                             Text {
+                                                id: chipLabel
+                                                x: chipIndicator.width + 6
+                                                anchors.verticalCenter: parent.verticalCenter
                                                 text: monitorName
-                                                color: primaryMonitor ? "#E2E2E2" : (monitorEnabled ? "#111111" : "#D9D9D9")
+                                                color: primaryLocked ? "#E2E2E2" : (monitorEnabled ? "#111111" : "#D9D9D9")
                                                 font.pixelSize: 12
                                                 font.bold: true
                                                 font.family: "SF Pro Display"
@@ -898,7 +924,7 @@ Item {
 
                                         MouseArea {
                                             anchors.fill: parent
-                                            enabled: !primaryMonitor
+                                            enabled: !primaryLocked
                                             hoverEnabled: true
                                             cursorShape: enabled ? Qt.PointingHandCursor : Qt.ArrowCursor
 
