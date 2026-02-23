@@ -16,7 +16,7 @@ Rectangle {
     Process {
         id: bluetoothCheck
         running: false
-        command: ["sh", "-c", "timeout 1 bluetoothctl show | grep -q 'Powered: yes' && echo POWERED_ON || echo POWERED_OFF"]
+        command: ["sh", "-c", "if timeout 2 nmcli radio bluetooth 2>/dev/null | grep -qi 'enabled'; then echo POWERED_ON; elif timeout 6 sh -c \"printf 'show\\nquit\\n' | bluetoothctl\" 2>/dev/null | grep -q 'Powered: yes'; then echo POWERED_ON; else echo POWERED_OFF; fi"]
 
         stdout: StdioCollector {
             onStreamFinished: bluetoothModule.bluetoothEnabled = (this.text ? this.text.trim() : "") === "POWERED_ON"

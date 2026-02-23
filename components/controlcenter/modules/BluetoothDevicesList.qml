@@ -130,6 +130,7 @@ Item {
                     anchors.fill: parent
                     onClicked: {
                         console.log("Toggle clicked, current state:", root.bluetoothEnabled)
+                        toggleBluetooth.targetEnabled = !root.bluetoothEnabled
                         toggleBluetooth.running = true
                     }
                 }
@@ -379,12 +380,15 @@ Item {
                     Process {
                         id: infoProc
                         running: false
-                        command: ["bluetoothctl", "info", modelData.address]
+                        command: ["sh", "-c", "timeout 6 sh -c \"printf 'info " + modelData.address + "\\nquit\\n' | bluetoothctl\""]
                         stdout: StdioCollector {
                             onStreamFinished: {
                                 var txt = this.text || ""
-                                deviceInfo.connected = txt.includes("Connected: yes")
-                                deviceInfo.paired = txt.includes("Paired: yes")
+                                if (txt.indexOf("Device ") === -1) {
+                                    return
+                                }
+                                deviceInfo.connected = /Connected:\s+yes/.test(txt)
+                                deviceInfo.paired = /Paired:\s+yes/.test(txt)
                             }
                         }
                     }
@@ -398,19 +402,19 @@ Item {
                 Process {
                     id: connectProc
                     running: false
-                    command: ["bluetoothctl", "connect", modelData.address]
+                    command: ["sh", "-c", "timeout 8 sh -c \"printf 'connect " + modelData.address + "\\nquit\\n' | bluetoothctl\""]
                     stdout: StdioCollector { onStreamFinished: { infoProc.running = true; listDevices.running = true } }
                 }
                 Process {
                     id: disconnectProc
                     running: false
-                    command: ["bluetoothctl", "disconnect", modelData.address]
+                    command: ["sh", "-c", "timeout 8 sh -c \"printf 'disconnect " + modelData.address + "\\nquit\\n' | bluetoothctl\""]
                     stdout: StdioCollector { onStreamFinished: { infoProc.running = true; listDevices.running = true } }
                 }
                 Process {
                     id: forgetProc
                     running: false
-                    command: ["bluetoothctl", "remove", modelData.address]
+                    command: ["sh", "-c", "timeout 8 sh -c \"printf 'remove " + modelData.address + "\\nquit\\n' | bluetoothctl\""]
                     stdout: StdioCollector { onStreamFinished: { infoProc.running = true; listDevices.running = true } }
                 }
             }
@@ -574,22 +578,35 @@ Item {
     Process {
         id: listDevices
         running: false
-        command: ["sh", "-c", "timeout 1 bluetoothctl devices"]
+        command: ["sh", "-c", "timeout 6 sh -c \"printf 'devices\\nquit\\n' | bluetoothctl\""]
         
         stdout: StdioCollector {
             onStreamFinished: {
                 var out = this.text ? this.text.trim() : ""
                 if (out === "") {
-                    root.devices = []
+                    if (!scanProc.running) {
+                        root.devices = []
+                    }
                     return
                 }
                 var lines = out.split("\n")
                 var devicesList = []
                 for (var i = 0; i < lines.length; i++) {
-                    var line = lines[i]
-                    var match = line.match(/Device ([0-9A-F:]+) (.+)/)
+                    var line = lines[i].trim()
+                    var match = line.match(/^Device\s+([0-9A-Fa-f:]+)\s+(.+)$/)
                     if (match) {
-                        devicesList.push({ address: match[1], name: match[2], icon: getDeviceIcon(match[2]) })
+                        var address = match[1].toUpperCase()
+                        var name = match[2]
+                        var exists = false
+                        for (var d = 0; d < devicesList.length; d++) {
+                            if (devicesList[d].address === address) {
+                                exists = true
+                                break
+                            }
+                        }
+                        if (!exists) {
+                            devicesList.push({ address: address, name: name, icon: getDeviceIcon(name) })
+                        }
                     }
                 }
                 root.devices = devicesList
@@ -601,7 +618,7 @@ Item {
     Process {
         id: checkBluetooth
         running: false
-        command: ["sh", "-c", "timeout 1 bluetoothctl show | grep -q 'Powered: yes' && echo POWERED_ON || echo POWERED_OFF"]
+        command: ["sh", "-c", "if timeout 2 nmcli radio bluetooth 2>/dev/null | grep -qi 'enabled'; then echo POWERED_ON; elif timeout 6 sh -c \"printf 'show\\nquit\\n' | bluetoothctl\" 2>/dev/null | grep -q 'Powered: yes'; then echo POWERED_ON; else echo POWERED_OFF; fi"]
 
         stdout: StdioCollector {
             onStreamFinished: {
@@ -620,15 +637,16 @@ Item {
     Process {
         id: toggleBluetooth
         running: false
-        command: ["bluetoothctl", "power", root.bluetoothEnabled ? "off" : "on"]
+        command: ["sh", "-c", targetEnabled ? "rfkill unblock bluetooth >/dev/null 2>&1 || true; timeout 2 nmcli radio bluetooth on >/dev/null 2>&1 || timeout 2 bluetoothctl power on >/dev/null 2>&1" : "timeout 2 nmcli radio bluetooth off >/dev/null 2>&1 || timeout 2 bluetoothctl power off >/dev/null 2>&1"]
         
         property bool wasEnabling: false
+        property bool targetEnabled: false
         
         onRunningChanged: {
             if (running) {
                 // Mémoriser si on est en train d'activer
-                wasEnabling = !root.bluetoothEnabled
-                console.log("Toggle BT starting, enabling:", wasEnabling, "command:", root.bluetoothEnabled ? "off" : "on")
+                wasEnabling = targetEnabled
+                console.log("Toggle BT starting, enabling:", wasEnabling, "target:", targetEnabled ? "on" : "off")
             }
         }
         
@@ -673,50 +691,56 @@ Item {
     Process {
         id: scanProc
         running: false
-        command: ["python3", "/home/emmanuel/.config/quickshell/components/controlcenter/modules/bt_scan.py"]
+        command: ["sh", "-c", "printf 'scan on\\nquit\\n' | bluetoothctl >/dev/null 2>&1; sleep 10; timeout 6 sh -c \"printf 'scan off\\ndevices\\nquit\\n' | bluetoothctl\""]
         
         stdout: StdioCollector {
-            onRead: data => {
-                console.log("Scan output:", data)
-                // Format: Device XX:XX:XX:XX:XX:XX Name
-                var lines = data.split('\n')
-                var scanned = root.scannedDevices.slice()
-                
+            onStreamFinished: {
+                var out = this.text ? this.text.trim() : ""
+                if (!out) {
+                    return
+                }
+
+                var lines = out.split("\n")
+                var scanned = []
+
                 for (var i = 0; i < lines.length; i++) {
                     var line = lines[i].trim()
-                    if (line.startsWith("Device ")) {
-                        var match = line.match(/Device ([0-9A-F:]+) (.+)/)
-                        if (match) {
-                            var address = match[1]
-                            var name = match[2]
-                            
-                            // Vérifier si pas déjà dans la liste
-                            var exists = false
-                            for (var j = 0; j < scanned.length; j++) {
-                                if (scanned[j].address === address) {
-                                    exists = true
-                                    break
-                                }
+                    var match = line.match(/^Device\s+([0-9A-Fa-f:]+)\s+(.+)$/)
+                    if (match) {
+                        var address = match[1].toUpperCase()
+                        var name = match[2]
+                        var exists = false
+
+                        for (var j = 0; j < scanned.length; j++) {
+                            if (scanned[j].address === address) {
+                                exists = true
+                                break
                             }
-                            if (!exists) {
-                                console.log("Adding scanned device:", address, name)
-                                scanned.push({ address: address, name: name })
-                                root.scannedDevices = scanned
-                            }
+                        }
+
+                        if (!exists) {
+                            scanned.push({ address: address, name: name })
                         }
                     }
                 }
+
+                root.scannedDevices = scanned
             }
         }
         
         onRunningChanged: {
             if (running) {
-                console.log("Starting Python-based scan...")
-                // Ne PAS vider scannedDevices ici pour les garder
+                console.log("Starting bluetoothctl timed scan...")
+                // Reset scan list au lancement d'un nouveau scan.
+                root.scannedDevices = []
                 scanTimer.start()
+                scanListPoll.running = true
+                listDevices.running = true
             } else {
-                console.log("Stopping Python-based scan...")
+                console.log("Stopping bluetoothctl timed scan...")
                 scanTimer.stop()
+                scanListPoll.running = false
+                listDevices.running = true
                 // Les devices restent affichés même après l'arrêt du scan
             }
         }
@@ -729,6 +753,16 @@ Item {
         repeat: false
         onTriggered: {
             scanProc.running = false
+        }
+    }
+
+    Timer {
+        id: scanListPoll
+        interval: 1200
+        repeat: true
+        running: false
+        onTriggered: {
+            listDevices.running = true
         }
     }
     
