@@ -11,6 +11,7 @@ Rectangle {
     property int brightnessLevel: 100
     property string displayName: "Display"  // Nom affiché
     property string deviceName: ""  // Nom du device pour brightnessctl (vide = default)
+    property bool pollingEnabled: true
     
     signal interactionStarted()
     signal interactionEnded()
@@ -56,18 +57,26 @@ Rectangle {
     
     Component.onCompleted: {
         // Lire la luminosité immédiatement au démarrage
-        getBrightness.running = true;
+        if (pollingEnabled) {
+            getBrightness.running = true;
+        }
     }
     
     // Timer pour rafraîchir la luminosité
     Timer {
-        interval: 500
+        interval: 2000
         repeat: true
-        running: true
+        running: root.pollingEnabled
         onTriggered: {
             if (!sliderMouse.pressed) {
-                getBrightness.running = true;
+                if (!getBrightness.running) getBrightness.running = true;
             }
+        }
+    }
+
+    onPollingEnabledChanged: {
+        if (pollingEnabled && !sliderMouse.pressed && !getBrightness.running) {
+            getBrightness.running = true;
         }
     }
     

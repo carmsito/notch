@@ -222,6 +222,7 @@ Scope {
                     id: mainNotch
                     anchors.horizontalCenter: parent.horizontalCenter
                     anchors.top: parent.top
+                    runtimeActive: barPanel.visible
                     monitorStates: rootScope.monitorEnabledStates
                     hostMonitorName: screenContainer.monitorName
                     onMonitorToggled: function(monitorName, enabled) {
@@ -257,6 +258,7 @@ Scope {
                     anchors.horizontalCenter: parent.horizontalCenter
                     anchors.top: parent.top
                     hovered: overlayPanel.visible
+                    runtimeActive: overlayPanel.visible
                     monitorStates: rootScope.monitorEnabledStates
                     hostMonitorName: screenContainer.monitorName
                     onMonitorToggled: function(monitorName, enabled) {

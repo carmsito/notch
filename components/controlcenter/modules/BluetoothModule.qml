@@ -12,6 +12,7 @@ Rectangle {
     signal clicked()  // Signal émis quand on clique sur le module
 
     property bool bluetoothEnabled: false
+    property bool pollingEnabled: true
 
     Process {
         id: bluetoothCheck
@@ -24,14 +25,21 @@ Rectangle {
     }
     
     Timer {
-        interval: 1000
-        running: true
+        interval: 3000
+        running: bluetoothModule.pollingEnabled
         repeat: true
         triggeredOnStart: true
-        onTriggered: bluetoothCheck.running = true
+        onTriggered: {
+            if (!bluetoothCheck.running) bluetoothCheck.running = true
+        }
     }
     
-    Component.onCompleted: bluetoothCheck.running = true
+    Component.onCompleted: {
+        if (pollingEnabled) bluetoothCheck.running = true
+    }
+    onPollingEnabledChanged: {
+        if (pollingEnabled && !bluetoothCheck.running) bluetoothCheck.running = true
+    }
     
     Behavior on color { ColorAnimation { duration: 200 } }
 

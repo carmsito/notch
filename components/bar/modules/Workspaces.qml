@@ -7,23 +7,12 @@ Item {
     id: root
     
     property bool isInteracting: false
+    property bool pollingEnabled: true
     property real fullWidth: 400 
     property int hoveredWorkspaceId: -1 
     property int refreshTrigger: 0
+    property var iconSourceCache: ({})
 
-    // Chemins de base à tester pour les icônes
-    property var iconBasePaths: [
-        "/usr/share/pixmaps/",
-        "/usr/share/icons/hicolor/256x256/apps/",
-        "/usr/share/icons/hicolor/128x128/apps/",
-        "/usr/share/icons/hicolor/scalable/apps/",
-        "~/.local/share/icons/hicolor/256x256/apps/",
-        "~/.local/share/icons/hicolor/128x128/apps/"
-    ]
-    
-    // Extensions d'icônes à tester
-    property var iconExtensions: [".png", ".svg", ".xpm", ""]
-    
     // Mots-clés pour détecter les apps depuis leur titre
     property var appKeywords: {
         "firefox": ["firefox"],
@@ -53,44 +42,70 @@ Item {
     // Fonction pour générer automatiquement tous les chemins possibles
     function generateIconCandidates(appName) {
         if (!appName) return [];
+        appName = normalizeAppName(appName);
+        if (appName === "") return [];
         
         var candidates = [];
         var appNameLower = appName.toLowerCase();
+        var seen = {};
         
-        // Variations de noms à tester
-        var nameVariations = [
-            appNameLower,
-            appName,
-            appNameLower.replace(/\s+/g, "-"),
-            appNameLower.replace(/\s+/g, "_"),
-            appNameLower.replace(/\s+/g, "")
-        ];
-        
-        // Ajouter les variations spécifiques si elles existent
-        if (appNameVariations[appNameLower]) {
-            nameVariations = nameVariations.concat(appNameVariations[appNameLower]);
+        function pushName(name) {
+            var cleaned = normalizeAppName(name);
+            if (cleaned === "" || seen[cleaned]) {
+                return;
+            }
+            seen[cleaned] = true;
+            candidates.push(cleaned);
         }
-        
-        // Générer tous les chemins possibles: base_path + name_variation + extension
-        for (var i = 0; i < iconBasePaths.length; i++) {
-            for (var j = 0; j < nameVariations.length; j++) {
-                for (var k = 0; k < iconExtensions.length; k++) {
-                    candidates.push(iconBasePaths[i] + nameVariations[j] + iconExtensions[k]);
-                }
+
+        // Variations spécifiques d'abord (souvent les bons noms d'icône)
+        if (appNameVariations[appNameLower]) {
+            for (var i = 0; i < appNameVariations[appNameLower].length; i++) {
+                pushName(appNameVariations[appNameLower][i]);
             }
         }
-        
-        // Ajouter les icônes du thème Qt (image://icon/)
-        for (var j = 0; j < nameVariations.length; j++) {
-            candidates.push("image://icon/" + nameVariations[j]);
-        }
-        
-        // Ajouter les noms simples pour fallback
-        for (var j = 0; j < nameVariations.length; j++) {
-            candidates.push(nameVariations[j]);
-        }
-        
+
+        pushName(appNameLower);
+        pushName(appName);
+        pushName(appNameLower.replace(/\s+/g, "-"));
+        pushName(appNameLower.replace(/\s+/g, "_"));
+        pushName(appNameLower.replace(/\s+/g, ""));
+
         return candidates;
+    }
+
+    // Fonction helper pour détecter l'app depuis le titre
+    function normalizeAppName(value) {
+        var cleaned = (value || "").trim().toLowerCase();
+        if (cleaned === "" || cleaned === "~") {
+            return "";
+        }
+        cleaned = cleaned.replace(/^[`'"]+|[`'"]+$/g, "");
+        cleaned = cleaned.split(/\s+/)[0];
+        cleaned = cleaned.replace(/[^a-z0-9._-]/g, "");
+        if (cleaned === "" || cleaned === "~" || cleaned === "-" || cleaned === "_") {
+            return "";
+        }
+        return cleaned;
+    }
+
+    function getCachedIconSource(key) {
+        if (!key || !iconSourceCache) {
+            return undefined;
+        }
+        return iconSourceCache[key];
+    }
+
+    function setCachedIconSource(key, value) {
+        if (!key) {
+            return;
+        }
+        var next = {};
+        for (var cacheKey in iconSourceCache) {
+            next[cacheKey] = iconSourceCache[cacheKey];
+        }
+        next[key] = value;
+        iconSourceCache = next;
     }
 
     // Fonction helper pour détecter l'app depuis le titre
@@ -108,7 +123,8 @@ Item {
         }
         
         // Fallback: premier mot du titre
-        return title.split(/[\s\-–—:]/)[0];
+        var token = title.split(/[\s\-–—:]/)[0];
+        return normalizeAppName(token);
     }
 
     // Fonction helper pour obtenir les icônes candidates
@@ -119,6 +135,7 @@ Item {
     // Fonction helper pour preview popup
     function getPreviewIcon(className) {
         if (!className) return "";
+        if (className === "~") return "";
         var lowerClass = className.toLowerCase();
         
         // Obtenir tous les candidats et retourner le premier du thème
@@ -144,9 +161,9 @@ Item {
     // Timer global qui force la vérification périodique de tous les toplevels
     Timer {
         id: globalRefreshTimer
-        interval: 500
+        interval: 4000
         repeat: true
-        running: true
+        running: root.pollingEnabled && root.isInteracting
         onTriggered: {
             root.refreshTrigger++;
         }
@@ -319,8 +336,10 @@ Item {
                                 function updateClass() {
                                     if (!tl) return "";
                                     
+                                    var ipc = tl.lastIpcObject || {};
+                                    var classHint = root.normalizeAppName((ipc.class || tl.appId || ""));
                                     var title = tl.title || "";
-                                    var c = root.detectAppFromTitle(title);
+                                    var c = classHint !== "" ? classHint : root.detectAppFromTitle(title);
                                     
                                     if (c !== "" && c !== detectedClass) {
                                         detectedClass = c;
@@ -339,9 +358,9 @@ Item {
                                         fillMode: Image.PreserveAspectFit
                                         asynchronous: true
                                         smooth: true
-                                        cache: false
-                                        sourceSize.width: 0
-                                        sourceSize.height: 0
+                                        cache: true
+                                        sourceSize.width: 18
+                                        sourceSize.height: 18
                                         
                                         property var candidates: []
                                         property int candidateIndex: 0
@@ -350,16 +369,30 @@ Item {
 
                                         function loadIcon(c) {
                                             appClass = c;
+                                            var cached = root.getCachedIconSource(c);
+                                            if (cached !== undefined) {
+                                                source = cached;
+                                                isLoading = false;
+                                                return;
+                                            }
                                             var list = root.getIconCandidates(c);
                                             candidates = list;
                                             candidateIndex = 0;
                                             if (list.length > 0) {
                                                 tryNextCandidate();
+                                            } else {
+                                                root.setCachedIconSource(c, "");
+                                                source = "";
                                             }
                                         }
                                         
                                         function tryNextCandidate() {
-                                            if (candidateIndex >= candidates.length) return;
+                                            if (candidateIndex >= candidates.length) {
+                                                isLoading = false;
+                                                if (appClass) root.setCachedIconSource(appClass, "");
+                                                source = "";
+                                                return;
+                                            }
                                             isLoading = true;
                                             var name = candidates[candidateIndex];
                                             if (!name) {
@@ -367,11 +400,7 @@ Item {
                                                 tryNextCandidate();
                                                 return;
                                             }
-                                            if (name.indexOf("/") >= 0) {
-                                                source = "file://" + name;
-                                            } else {
-                                                source = "image://icon/" + name;
-                                            }
+                                            source = name.indexOf("image://") === 0 ? name : ("image://icon/" + name);
                                         }
 
                                         Component.onCompleted: {
@@ -381,8 +410,7 @@ Item {
                                         onStatusChanged: {
                                             if (!isLoading) return;
                                             if (status === Image.Ready) {
-                                                sourceSize.width = 18;
-                                                sourceSize.height = 18;
+                                                if (appClass) root.setCachedIconSource(appClass, source);
                                                 isLoading = false;
                                             } else if (status === Image.Error || status === Image.Null) {
                                                 candidateIndex++;
@@ -418,7 +446,7 @@ Item {
                 delegate: Item {
                     id: wsDelegate
                     property int wsId: modelData.id
-                    property bool isActive: Hyprland.activeWorkspace && Hyprland.activeWorkspace.id === wsId
+                    property bool isActive: !!(Hyprland.activeWorkspace && Hyprland.activeWorkspace.id === wsId)
                     
                     property bool isHovered: delegateMouseArea.containsMouse
                     property bool isVisible: root.isInteracting || isActive
@@ -538,8 +566,9 @@ Item {
                                                     fillMode: Image.PreserveAspectFit
                                                     asynchronous: true
                                                     smooth: true
-                                                    sourceSize.width: 0
-                                                    sourceSize.height: 0
+                                                    cache: true
+                                                    sourceSize.width: 20
+                                                    sourceSize.height: 20
                                                     Component.onCompleted: {
                                                         var ipc = tl.lastIpcObject || {};
                                                         var c = (ipc.class || "").toLowerCase();
@@ -547,12 +576,7 @@ Item {
                                                             source = root.getPreviewIcon(c);
                                                         }
                                                     }
-                                                    onStatusChanged: {
-                                                        if (status === Image.Ready) {
-                                                            sourceSize.width = 24;
-                                                            sourceSize.height = 24;
-                                                        }
-                                                    }
+                                                    onStatusChanged: {}
                                                     
                                                     Rectangle {
                                                         anchors.fill: parent
@@ -612,8 +636,10 @@ Item {
                                     function updateClass() {
                                         if (!tl) return "";
                                         
+                                        var ipc = tl.lastIpcObject || {};
+                                        var classHint = root.normalizeAppName((ipc.class || tl.appId || ""));
                                         var title = tl.title || "";
-                                        var c = root.detectAppFromTitle(title);
+                                        var c = classHint !== "" ? classHint : root.detectAppFromTitle(title);
                                         
                                         if (c !== "" && c !== detectedClass) {
                                             detectedClass = c;
@@ -633,9 +659,9 @@ Item {
                                             fillMode: Image.PreserveAspectFit
                                             asynchronous: true
                                             smooth: true
-                                            cache: false
-                                            sourceSize.width: 0
-                                            sourceSize.height: 0
+                                            cache: true
+                                            sourceSize.width: 24
+                                            sourceSize.height: 24
                                             
                                             property var candidates: []
                                             property int candidateIndex: 0
@@ -644,16 +670,30 @@ Item {
 
                                             function loadIcon(c) {
                                                 appClass = c;
+                                                var cached = root.getCachedIconSource(c);
+                                                if (cached !== undefined) {
+                                                    source = cached;
+                                                    isLoading = false;
+                                                    return;
+                                                }
                                                 var list = root.getIconCandidates(c);
                                                 candidates = list;
                                                 candidateIndex = 0;
                                                 if (list.length > 0) {
                                                     tryNextCandidate();
+                                                } else {
+                                                    root.setCachedIconSource(c, "");
+                                                    source = "";
                                                 }
                                             }
                                             
                                             function tryNextCandidate() {
-                                                if (candidateIndex >= candidates.length) return;
+                                                if (candidateIndex >= candidates.length) {
+                                                    isLoading = false;
+                                                    if (appClass) root.setCachedIconSource(appClass, "");
+                                                    source = "";
+                                                    return;
+                                                }
                                                 isLoading = true;
                                                 var name = candidates[candidateIndex];
                                                 if (!name) {
@@ -661,11 +701,7 @@ Item {
                                                     tryNextCandidate();
                                                     return;
                                                 }
-                                                if (name.indexOf("/") >= 0) {
-                                                    source = "file://" + name;
-                                                } else {
-                                                    source = "image://icon/" + name;
-                                                }
+                                                source = name.indexOf("image://") === 0 ? name : ("image://icon/" + name);
                                             }
 
                                             Component.onCompleted: {
@@ -675,8 +711,7 @@ Item {
                                             onStatusChanged: {
                                                 if (!isLoading) return;
                                                 if (status === Image.Ready) {
-                                                    sourceSize.width = 24;
-                                                    sourceSize.height = 24;
+                                                    if (appClass) root.setCachedIconSource(appClass, source);
                                                     isLoading = false;
                                                 } else if (status === Image.Error || status === Image.Null) {
                                                     candidateIndex++;

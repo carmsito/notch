@@ -4,6 +4,7 @@ import "."
 Item {
     id: root
     width: 430
+    property bool pollingEnabled: true
 
     signal close()
     signal interactionStarted()
@@ -72,6 +73,7 @@ Item {
         anchors.horizontalCenter: parent.horizontalCenter
         width: 430
         height: parent.height - headerColumn.height - 16
+        pollingEnabled: root.pollingEnabled
         onInteractionStarted: {
             root.interactionStarted()
         }

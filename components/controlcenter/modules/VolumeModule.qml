@@ -11,6 +11,7 @@ Rectangle {
     property int volumeLevel: 50
     property bool isMuted: false
     property int lastKnownVolume: 50  // Pour calculer la différence
+    property bool pollingEnabled: true
     signal interactionStarted()
     signal interactionEnded()
     signal advancedRequested()
@@ -70,21 +71,30 @@ Rectangle {
 
     // Poll volume
     Timer {
-        interval: 200
+        interval: 1500
         repeat: true
-        running: true
+        running: root.pollingEnabled
         onTriggered: {
             if (!sliderMouse.pressed) {
-                getVolume.running = true;
-                getMuteStatus.running = true;
+                if (!getVolume.running) getVolume.running = true;
+                if (!getMuteStatus.running) getMuteStatus.running = true;
             }
         }
     }
 
     Component.onCompleted: {
         // Lire le volume immédiatement au démarrage
-        getVolume.running = true;
-        getMuteStatus.running = true;
+        if (pollingEnabled) {
+            getVolume.running = true;
+            getMuteStatus.running = true;
+        }
+    }
+
+    onPollingEnabledChanged: {
+        if (pollingEnabled && !sliderMouse.pressed) {
+            if (!getVolume.running) getVolume.running = true;
+            if (!getMuteStatus.running) getMuteStatus.running = true;
+        }
     }
 
     MouseArea {
@@ -287,15 +297,12 @@ Rectangle {
                         value = Math.max(0, Math.min(1, mouseX / width));
                         var newVolume = Math.round(value * 100);
                         
-                        console.log("VolumeModule: Setting volume to", newVolume);
-                        
                         // Mettre à jour directement avec la valeur absolue (même à 0)
                         root.volumeLevel = newVolume;
                         root.lastKnownVolume = newVolume;
                         
                         // Appliquer directement sur global-audio (fallback défaut si absent)
                         setVolume.command = ["sh", "-c", root.sinkResolvePrefix() + "if [ -n \"$target\" ]; then pactl set-sink-volume \"$target\" " + newVolume + "%; fi"];
-                        console.log("VolumeModule: Command = pactl set-sink-volume <global-audio>", newVolume + "%");
                         setVolume.running = true;
 
                         // Unmute si on change le volume au-dessus de 0
@@ -379,12 +386,6 @@ Rectangle {
     Process {
         id: setVolume
         running: false
-        onExited: {
-            console.log("VolumeModule: setVolume exited with code", exitCode);
-            if (exitCode !== 0 && stderr) {
-                console.error("VolumeModule: Error:", stderr.trim());
-            }
-        }
     }
 
     Process {

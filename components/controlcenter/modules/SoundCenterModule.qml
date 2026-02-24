@@ -16,6 +16,7 @@ Rectangle {
     property bool masterMuted: false
     property int activeSliderInteractions: 0
     property bool outputSelectorOpen: false
+    property bool pollingEnabled: true
 
     signal interactionStarted()
     signal interactionEnded()
@@ -204,11 +205,7 @@ Rectangle {
         selectedSinkName = sinkName
         outputSelectorOpen = false
         var escapedSink = escapeShell(sinkName)
-        setDefaultSink.command = ["sh", "-c",
-                                  "pactl set-default-sink '" + escapedSink + "' >/dev/null 2>&1; " +
-                                  "for input in $(pactl list short sink-inputs 2>/dev/null | awk '{print $1}'); do " +
-                                  "pactl move-sink-input \"$input\" '" + escapedSink + "' >/dev/null 2>&1; " +
-                                  "done"]
+        setDefaultSink.command = ["sh", "-c", "pactl set-default-sink '" + escapedSink + "' >/dev/null 2>&1"]
         setDefaultSink.running = true
         refreshMaster()
     }
@@ -241,16 +238,26 @@ Rectangle {
         setStreamVolumeProc.running = true
     }
 
-    Component.onCompleted: refreshAll()
+    Component.onCompleted: {
+        if (pollingEnabled) {
+            refreshAll()
+        }
+    }
 
     Timer {
-        interval: 1200
+        interval: 3000
         repeat: true
-        running: true
+        running: root.pollingEnabled
         onTriggered: {
             if (root.activeSliderInteractions === 0) {
                 root.refreshAll()
             }
+        }
+    }
+
+    onPollingEnabledChanged: {
+        if (pollingEnabled && root.activeSliderInteractions === 0) {
+            root.refreshAll()
         }
     }
 
@@ -620,6 +627,7 @@ Rectangle {
                     width: parent.width
 
                     Text {
+                        id: outputVolumeLabel
                         text: "Output Volume"
                         color: "white"
                         font.pixelSize: 12
@@ -627,8 +635,13 @@ Rectangle {
                         font.family: "SF Pro Display"
                     }
 
+                    Item {
+                        width: Math.max(0, parent.width - outputVolumeLabel.implicitWidth - outputVolumeValue.implicitWidth)
+                        height: 1
+                    }
+
                     Text {
-                        anchors.right: parent.right
+                        id: outputVolumeValue
                         text: root.masterVolume + "%"
                         color: root.masterMuted ? "#FF8A8A" : "#DCDCDC"
                         font.pixelSize: 11

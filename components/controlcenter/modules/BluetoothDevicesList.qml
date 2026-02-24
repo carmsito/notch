@@ -11,6 +11,7 @@ Item {
     property var scannedDevices: []  // Liste des appareils découverts par scan
     property bool initialCheckDone: false
     property int activeDeviceIndex: -1  // Index du device avec panneau actif
+    property bool pollingEnabled: true
     
     signal close()
     
@@ -393,7 +394,7 @@ Item {
                         }
                     }
                     Timer {
-                        interval: 4000; running: true; repeat: true; triggeredOnStart: true
+                        interval: 12000; running: root.pollingEnabled && root.visible; repeat: true; triggeredOnStart: true
                         onTriggered: infoProc.running = true
                     }
                 }
@@ -758,7 +759,7 @@ Item {
 
     Timer {
         id: scanListPoll
-        interval: 1200
+        interval: 1800
         repeat: true
         running: false
         onTriggered: {
@@ -810,9 +811,9 @@ Item {
     
     // Timer pour rafraîchir la liste
     Timer {
-        interval: 2000
+        interval: 4000
         repeat: true
-        running: true
+        running: root.pollingEnabled && root.visible
         onTriggered: {
             checkBluetooth.running = true
             // Ne scanner que si Bluetooth est activé
@@ -824,8 +825,20 @@ Item {
     
     // Initialisation
     Component.onCompleted: {
-        checkBluetooth.running = true
-        // Scanner au démarrage si BT activé sera fait par le timer
+        if (pollingEnabled) {
+            checkBluetooth.running = true
+            // Scanner au démarrage si BT activé sera fait par le timer
+        }
+    }
+
+    onPollingEnabledChanged: {
+        if (!pollingEnabled) {
+            scanProc.running = false
+            scanListPoll.running = false
+            return
+        }
+        if (!checkBluetooth.running) checkBluetooth.running = true
+        if (root.bluetoothEnabled && !listDevices.running) listDevices.running = true
     }
     
     // Fonction pour obtenir l'icône selon le type d'appareil

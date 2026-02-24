@@ -1,5 +1,5 @@
 // components/Battery.qml
-import QtQuick 2.15    // <--- AJOUTE CETTE LIGNE OBLIGATOIRE POUR LE TIMER
+import QtQml
 import Quickshell
 import Quickshell.Io
 
@@ -7,34 +7,43 @@ Scope {
     id: root
     property int batteryLevel: 0
     property bool isCharging: false
+    property bool pollingEnabled: true
 
-    // 1. Processus pour lire le niveau
-    Process {
-        id: batteryLevelProc
-        command: ["cat", "/sys/class/power_supply/BAT0/capacity"]
-        stdout: SplitParser {
-            onRead: data => root.batteryLevel = parseInt(data.trim())
+    function refreshLevel() {
+        var raw = batteryLevelFile.text()
+        var next = parseInt((raw || "").trim())
+        if (!isNaN(next)) {
+            batteryLevel = next
         }
     }
 
-    // 2. Processus pour lire le statut (Charging/Discharging)
-    Process {
-        id: batteryStatusProc
-        command: ["cat", "/sys/class/power_supply/BAT0/status"]
-        stdout: SplitParser {
-            onRead: data => root.isCharging = (data.trim() === "Charging")
-        }
+    function refreshStatus() {
+        var raw = batteryStatusFile.text()
+        isCharging = (raw || "").trim() === "Charging"
     }
 
-    // 3. Le Timer qui déclenche les mises à jour
-    Timer {
-        interval: 5000
-        running: true
-        repeat: true
-        triggeredOnStart: true
-        onTriggered: {
-            batteryLevelProc.running = true
-            batteryStatusProc.running = true
-        }
+    FileView {
+        id: batteryLevelFile
+        path: "/sys/class/power_supply/BAT0/capacity"
+        preload: true
+        blockLoading: true
+        printErrors: false
+        onLoaded: root.refreshLevel()
+        onFileChanged: root.refreshLevel()
+    }
+
+    FileView {
+        id: batteryStatusFile
+        path: "/sys/class/power_supply/BAT0/status"
+        preload: true
+        blockLoading: true
+        printErrors: false
+        onLoaded: root.refreshStatus()
+        onFileChanged: root.refreshStatus()
+    }
+
+    Component.onCompleted: {
+        refreshLevel()
+        refreshStatus()
     }
 }

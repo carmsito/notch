@@ -136,10 +136,11 @@ Rectangle {
     }
     
     property string fanProfile: "Checking..."
+    property bool pollingEnabled: true
 
     Timer {
-        interval: 2000
-        running: true
+        interval: 8000
+        running: fansControl.pollingEnabled
         repeat: true
         onTriggered: {
             if (!fanProfileProcess.running) fanProfileProcess.running = true
@@ -147,7 +148,10 @@ Rectangle {
     }
 
     Component.onCompleted: {
-        if (!fanProfileProcess.running) fanProfileProcess.running = true
+        if (pollingEnabled && !fanProfileProcess.running) fanProfileProcess.running = true
+    }
+    onPollingEnabledChanged: {
+        if (pollingEnabled && !fanProfileProcess.running) fanProfileProcess.running = true
     }
 
     // ========= PROCESS FAN PROFILE =========

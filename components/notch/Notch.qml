@@ -33,6 +33,7 @@ Item {
     property bool needsKeyboardFocus: false       // Pour demander le focus clavier
     property var monitorStates: ({})
     property string hostMonitorName: ""
+    property bool runtimeActive: true
     // Empêche le hover initial de s'activer au démarrage (barre démarre compacte)
     property bool startupLock: true
 
@@ -78,6 +79,13 @@ Item {
     property var containers: ["Control Center", "Performance", "Notifications"]
     property int currentContainerIndex: 0
     property string currentContainerTitle: containers[currentContainerIndex]
+    property bool controlCenterActive: runtimeActive && hovered && currentContainerIndex === 0 &&
+                                       !showingBluetoothDevices && !showingWifiNetworks && !showingSoundCenter
+    property bool performanceActive: runtimeActive && hovered && currentContainerIndex === 1
+    property bool bluetoothPageActive: runtimeActive && hovered && currentContainerIndex === 0 && showingBluetoothDevices
+    property bool wifiPageActive: runtimeActive && hovered && currentContainerIndex === 0 && showingWifiNetworks
+    property bool soundPageActive: runtimeActive && hovered && currentContainerIndex === 0 && showingSoundCenter
+
     onCurrentContainerIndexChanged: {
         if (currentContainerIndex !== 0) {
             showingSoundCenter = false
@@ -87,13 +95,15 @@ Item {
     implicitHeight: hoverStrip.height + notchRect.height
 
     // --- LOGIQUE ---
-    Battery { id: batteryData }
+    Battery {
+        id: batteryData
+        pollingEnabled: root.runtimeActive
+    }
     
-    property string wifiPath: "/sys/class/net/wlan0/operstate"
-    property var wifiFile: File.exists(wifiPath) ? File.read(wifiPath) : "down"
-    property bool isWifiConnected: wifiFile && wifiFile.trim() === "up"
-
-    Time { id: timeSource }
+    Time {
+        id: timeSource
+        pollingEnabled: root.runtimeActive
+    }
 
     // Timer pour éviter le clignotement du hover
     Timer {
@@ -218,6 +228,7 @@ Item {
                 anchors.verticalCenter: parent.verticalCenter
                 // On passe la largeur totale disponible à Workspaces pour qu'il sache s'étendre
                 fullWidth: notchRect.width
+                pollingEnabled: root.runtimeActive
             }
 
             // --- BATTERIE (DOIT DISPARAITRE QUAND WORKSPACES S'ÉTEND) ---
@@ -749,6 +760,7 @@ Item {
                                 id: wifiMod
                                 width: 225
                                 height: 70
+                                pollingEnabled: root.controlCenterActive
                                 onClicked: {
                                     root.showingSoundCenter = false
                                     root.showingWifiNetworks = true
@@ -759,6 +771,7 @@ Item {
                                 id: bluetoothMod
                                 width: 225
                                 height: 70
+                                pollingEnabled: root.controlCenterActive
                                 
                                 onClicked: {
                                     root.showingSoundCenter = false
@@ -774,6 +787,7 @@ Item {
                             anchors.horizontalCenter: parent.horizontalCenter
                             displayName: "Display"
                             deviceName: ""
+                            pollingEnabled: root.controlCenterActive
                             onInteractionStarted: hoverTimer.stop()
                         }
                         
@@ -784,6 +798,7 @@ Item {
                             anchors.horizontalCenter: parent.horizontalCenter
                             displayName: "ScreenPad"
                             deviceName: "asus_screenpad"
+                            pollingEnabled: root.controlCenterActive
                             onInteractionStarted: hoverTimer.stop()
                         }
 
@@ -792,6 +807,7 @@ Item {
                             id: volumeMod
                             width: 450
                             anchors.horizontalCenter: parent.horizontalCenter
+                            pollingEnabled: root.controlCenterActive
                             onInteractionStarted: hoverTimer.stop()
                             onAdvancedRequested: {
                                 root.showingBluetoothDevices = false
@@ -813,6 +829,7 @@ Item {
                         anchors.top: parent.top
                         anchors.topMargin: 2
                         anchors.horizontalCenter: parent.horizontalCenter
+                        pollingEnabled: root.performanceActive
                     }
 
                     Rectangle {
@@ -1005,6 +1022,7 @@ Item {
             anchors.bottomMargin: 12
             anchors.leftMargin: 12
             anchors.rightMargin: 12
+            pollingEnabled: root.bluetoothPageActive
             
             opacity: root.hovered && root.showingBluetoothDevices ? 1 : 0
             visible: root.currentContainerIndex === 0 && opacity > 0
@@ -1053,6 +1071,7 @@ Item {
             anchors.bottomMargin: 12
             anchors.leftMargin: 12
             anchors.rightMargin: 12
+            pollingEnabled: root.soundPageActive
 
             opacity: root.hovered && root.showingSoundCenter ? 1 : 0
             visible: root.currentContainerIndex === 0 && opacity > 0

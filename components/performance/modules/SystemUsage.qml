@@ -15,16 +15,22 @@ Item {
     property int gpuTemp: 0
     property int cpuUsage: 0
     property int gpuUsage: 0
+    property bool pollingEnabled: true
 
     // Timer de mise à jour
     Timer {
-        interval: 2000
-        running: true
+        interval: 5000
+        running: systemUsage.pollingEnabled
         repeat: true
         onTriggered: updateSystemStats()
     }
 
-    Component.onCompleted: updateSystemStats()
+    Component.onCompleted: {
+        if (pollingEnabled) updateSystemStats()
+    }
+    onPollingEnabledChanged: {
+        if (pollingEnabled) updateSystemStats()
+    }
 
     ColumnLayout {
         anchors.fill: parent
@@ -348,7 +354,6 @@ Item {
 
         stdout: StdioCollector {
             onStreamFinished: {
-                console.log("RAM Stream Finished. Text: '" + text + "'")
                 var output = (text || "").trim()
                 var parts = output.split(" ")
                 if (parts.length >= 2) {
@@ -357,7 +362,6 @@ Item {
                 }
             }
         }
-        onExited: console.log("RAM Process Exited with code: " + exitCode)
     }
 
     // ========= PROCESS CPU TEMP =========
@@ -367,7 +371,6 @@ Item {
 
         stdout: StdioCollector {
             onStreamFinished: {
-                console.log("CPU Temp Stream Finished. Text: '" + text + "'")
                 var output = (text || "").trim()
                 var temp = parseFloat(output)
                 if (!isNaN(temp) && temp > 0) cpuTemp = Math.round(temp)
@@ -382,7 +385,6 @@ Item {
 
         stdout: StdioCollector {
             onStreamFinished: {
-                console.log("GPU Temp Stream Finished. Text: '" + text + "'")
                 var output = (text || "").trim()
                 var temp = parseFloat(output)
                 if (!isNaN(temp) && temp > 0) gpuTemp = Math.round(temp)
@@ -397,7 +399,6 @@ Item {
 
         stdout: StdioCollector {
             onStreamFinished: {
-                console.log("CPU Usage Stream Finished. Text: '" + text + "'")
                 var output = (text || "").trim()
                 var usage = parseFloat(output)
                 if (!isNaN(usage)) cpuUsage = Math.round(Math.max(0, Math.min(usage, 100)))
@@ -412,7 +413,6 @@ Item {
 
         stdout: StdioCollector {
             onStreamFinished: {
-                console.log("GPU Usage Stream Finished. Text: '" + text + "'")
                 var output = (text || "").trim()
                 var usage = parseFloat(output)
                 if (!isNaN(usage)) gpuUsage = Math.round(Math.max(0, Math.min(usage, 100)))

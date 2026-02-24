@@ -57,18 +57,26 @@ Rectangle {
     property string connectionName: ""
     property string connectionType: ""
     property int signalStrength: 0
+    property bool pollingEnabled: true
 
     Timer {
-        interval: 2000
-        running: true
+        interval: 4000
+        running: wifiModule.pollingEnabled
         repeat: true
         triggeredOnStart: true
         onTriggered: {
-            wifiCheck.running = true
-            activeConnectionCheck.running = true
+            if (!wifiCheck.running) wifiCheck.running = true
+            if (!activeConnectionCheck.running) activeConnectionCheck.running = true
             if (wifiModule.connectionType === "802-11-wireless" || wifiModule.connectionType === "wifi") {
-                wifiSignalCheck.running = true
+                if (!wifiSignalCheck.running) wifiSignalCheck.running = true
             }
+        }
+    }
+
+    onPollingEnabledChanged: {
+        if (pollingEnabled) {
+            if (!wifiCheck.running) wifiCheck.running = true
+            if (!activeConnectionCheck.running) activeConnectionCheck.running = true
         }
     }
     

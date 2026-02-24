@@ -1,26 +1,25 @@
 // Time.qml
 import Quickshell
-import Quickshell.Io
 import QtQuick
 
 Scope {
   id: root
-  property string time
+  property string time: ""
+  property bool pollingEnabled: true
 
-  Process {
-    id: dateProc
-    command: ["date"]
-    running: true
-
-    stdout: StdioCollector {
-      onStreamFinished: root.time = this.text
-    }
+  function updateTime() {
+    var now = new Date()
+    // Format proche de `date` tout en évitant un process externe chaque seconde.
+    root.time = Qt.formatDateTime(now, "ddd. dd MMM yyyy HH:mm:ss t")
   }
 
   Timer {
     interval: 1000
-    running: true
+    running: root.pollingEnabled
     repeat: true
-    onTriggered: dateProc.running = true
+    triggeredOnStart: true
+    onTriggered: root.updateTime()
   }
+
+  Component.onCompleted: root.updateTime()
 }
