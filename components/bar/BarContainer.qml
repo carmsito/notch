@@ -156,7 +156,7 @@ Scope {
                     right: true
                 }
 
-                property int topGap: 48
+                property int topGap: 25
 
                 implicitHeight: topGap
                 exclusiveZone: (screenContainer.notchEnabled && !screenContainer.isFullscreen) ? topGap : 0

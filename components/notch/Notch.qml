@@ -13,7 +13,7 @@ Item {
 
     width: hovered ? expandedWidth : collapsedWidth
 
-    property int collapsedHeight: 40
+    property int collapsedHeight: 30
     property int expandedHeight: 395
 
     property int collapsedRadius: 20
@@ -170,7 +170,7 @@ Item {
         }
     }
 
-    implicitHeight: hoverStrip.height + notchRect.height
+    implicitHeight: notchRect.height
 
     // --- LOGIQUE ---
     Battery {
@@ -253,52 +253,124 @@ Item {
 
     // --- VISUEL ---
 
-    // 1. Zone de détection hover AU-DESSUS
-    Item {
-        id: hoverStrip
-        width: hoverTriggerWidth 
-        height: 8  // Augmenter légèrement pour meilleure détection
-        anchors.horizontalCenter: notchRect.horizontalCenter
-        anchors.bottom: notchRect.top
-        anchors.bottomMargin: -4  // Chevaucher légèrement avec le rectangle
-
-        MouseArea {
-            anchors.fill: parent
-            hoverEnabled: true
-            acceptedButtons: Qt.NoButton
-            onEntered: {
-                if (!root.startupLock) {
-                    root.hovered = true
-                    hoverTimer.stop()
-                }
-            }
-            onExited: {
-                // Ne redémarre le timer que si on n'est pas dans le rectangle principal et pas verrouillé
-                if (!globalHoverArea.containsMouse && !root.isLocked) {
-                    hoverTimer.restart()
-                }
-            }
-        }
-    }
+    // (La zone de détection hover est déclarée comme dernier enfant de notchRect,
+    // plus bas, pour être au-dessus des autres MouseArea dans l'ordre d'empilement.)
 
     // 2. Le rectangle principal
-    Rectangle {
+    Item {
         id: notchRect
         anchors.horizontalCenter: parent.horizontalCenter
-        anchors.bottom: parent.bottom
+        anchors.top: parent.top
 
         width: root.width
         height: hovered ? expandedHeight : collapsedHeight
-        radius: hovered ? expandedRadius : collapsedRadius
+        // "radius" garde son nom pour ne rien casser ailleurs dans le fichier,
+        // mais sert maintenant de taille de chanfrein (coupe à 45°, style octogone).
+        property real radius: hovered ? expandedRadius : collapsedRadius
+        // En mode compact : diagonale sur toute la hauteur (façon ruban/chevron).
+        // En mode expanded : chanfrein léger seulement (panneau large, pas de ruban).
+        property real chamfer: root.hovered ? expandedRadius : height
 
-        color: hovered ? '#a2000000' : '#d1000000'
-        border.color: hovered ? "#30FFFFFF" : "#33FFFFFF"
-        border.width: 1
+        property color fillColor: hovered ? '#f0000000' : '#fa000000'
+        property color strokeColor: hovered ? "#30FFFFFF" : "#33FFFFFF"
+        property color color: fillColor
 
         Behavior on width { NumberAnimation { duration: 100; easing.type: Easing.OutExpo } }
         Behavior on height { NumberAnimation { duration: 100; easing.type: Easing.OutExpo } }
-        Behavior on radius { NumberAnimation { duration: 100; easing.type: Easing.OutExpo } }
-        Behavior on color { ColorAnimation { duration: 100 } }
+        Behavior on chamfer { NumberAnimation { duration: 100; easing.type: Easing.OutExpo } }
+        Behavior on fillColor { ColorAnimation { duration: 100 } }
+        Behavior on strokeColor { ColorAnimation { duration: 100 } }
+
+        // Forme sharp : haut carré (collé pixel-perfect à l'écran), coins bas coupés
+        // en diagonale à 45° (chanfrein façon coin d'octogone) — aucun arrondi.
+        // (QtQuick.Shapes n'est pas disponible dans cet environnement Quickshell,
+        // donc la forme est construite avec des Rectangle simples + 2 carrés tournés
+        // à 45° pour les diagonales — fiable, pas de rendu foireux.)
+        Item {
+            id: notchShapeRoot
+            anchors.fill: parent
+            clip: true
+
+            // Corps du haut (plein largeur, jusqu'au début du chanfrein)
+            Rectangle {
+                x: 0; y: 0
+                width: notchRect.width
+                height: Math.max(notchRect.height - notchRect.chamfer, 0)
+                color: notchRect.fillColor
+            }
+
+            // Bande du bas (plus étroite, entre les deux chanfreins)
+            Rectangle {
+                x: notchRect.chamfer
+                y: Math.max(notchRect.height - notchRect.chamfer, 0)
+                width: Math.max(notchRect.width - 2 * notchRect.chamfer, 0)
+                height: notchRect.chamfer
+                color: notchRect.fillColor
+            }
+
+            // Remplissage diagonal du coin bas-gauche (carré tourné à 45°, centré au
+            // point interne où le corps du haut rencontre la bande du bas)
+            Rectangle {
+                width: notchRect.chamfer * Math.SQRT2
+                height: width
+                rotation: 45
+                color: notchRect.fillColor
+                x: notchRect.chamfer - width / 2
+                y: (notchRect.height - notchRect.chamfer) - height / 2
+            }
+
+            // Remplissage diagonal du coin bas-droit (symétrique)
+            Rectangle {
+                width: notchRect.chamfer * Math.SQRT2
+                height: width
+                rotation: 45
+                color: notchRect.fillColor
+                x: (notchRect.width - notchRect.chamfer) - width / 2
+                y: (notchRect.height - notchRect.chamfer) - height / 2
+            }
+
+            // --- Bordure : côtés + bas chanfreiné uniquement (pas le haut, collé à l'écran) ---
+
+            Rectangle { // côté gauche
+                x: 0; y: 0
+                width: 1
+                height: Math.max(notchRect.height - notchRect.chamfer, 0)
+                color: notchRect.strokeColor
+            }
+
+            Rectangle { // côté droit
+                x: notchRect.width - 1; y: 0
+                width: 1
+                height: Math.max(notchRect.height - notchRect.chamfer, 0)
+                color: notchRect.strokeColor
+            }
+
+            Rectangle { // bas plat
+                x: notchRect.chamfer
+                y: notchRect.height - 1
+                width: Math.max(notchRect.width - 2 * notchRect.chamfer, 0)
+                height: 1
+                color: notchRect.strokeColor
+            }
+
+            Rectangle { // diagonale bas-gauche
+                width: notchRect.chamfer * Math.SQRT2
+                height: 1
+                rotation: 45
+                color: notchRect.strokeColor
+                x: notchRect.chamfer / 2 - width / 2
+                y: (notchRect.height - notchRect.chamfer / 2) - height / 2
+            }
+
+            Rectangle { // diagonale bas-droite
+                width: notchRect.chamfer * Math.SQRT2
+                height: 1
+                rotation: -45
+                color: notchRect.strokeColor
+                x: (notchRect.width - notchRect.chamfer / 2) - width / 2
+                y: (notchRect.height - notchRect.chamfer / 2) - height / 2
+            }
+        }
 
         // --- CONTENU ---
 
@@ -313,10 +385,11 @@ Item {
             // -> On casse l'ancrage à gauche et on se centre
             // -> On prend toute la largeur
             anchors.left: wsWidget.isInteracting ? undefined : parent.left
-            anchors.leftMargin: wsWidget.isInteracting ? 0 : 12
+            anchors.leftMargin: wsWidget.isInteracting ? 0 : 34
             
             anchors.horizontalCenter: wsWidget.isInteracting ? parent.horizontalCenter : undefined
             anchors.verticalCenter: parent.verticalCenter
+            anchors.verticalCenterOffset: -4
             
             width: wsWidget.isInteracting ? parent.width : undefined
 
@@ -366,6 +439,7 @@ Item {
         ClockWidget {
             id: centerClock
             anchors.centerIn: parent
+            anchors.verticalCenterOffset: -4
             time: timeSource.time
             color: "white"
             
@@ -376,8 +450,9 @@ Item {
         // 3. CONNEXION ICONS (DROITE) - Wi-Fi/Ethernet/Bluetooth
         Row {
             anchors.right: parent.right
-            anchors.rightMargin: 18
+            anchors.rightMargin: 38
             anchors.verticalCenter: parent.verticalCenter
+            anchors.verticalCenterOffset: -4
             spacing: 8
 
             opacity: (root.hovered || root.compactVideoActive) ? 0 : 1
@@ -1292,6 +1367,32 @@ Item {
             onExited: {
                 if (!root.isLocked) {
                     hoverTimer.restart()
+                }
+            }
+        }
+
+        // Zone de déclenchement du hover : petite bande centrée, tout en haut de la barre
+        // (pas toute la largeur/hauteur — juste ce point d'entrée précis)
+        // Elle ne fait qu'OUVRIR : la fermeture est entièrement gérée par globalHoverArea.
+        // (si on gérait aussi la fermeture ici, désactiver ce MouseArea au moment où
+        // hovered passe à true déclenche un faux "exited" qui relance le timer de fermeture
+        // alors que la souris est toujours dans le bloc -> flicker/spam)
+        MouseArea {
+            id: hoverTriggerArea
+            width: root.hoverTriggerWidth
+            height: 28
+            anchors.horizontalCenter: parent.horizontalCenter
+            anchors.top: parent.top
+
+            hoverEnabled: true
+            acceptedButtons: Qt.NoButton
+            enabled: !root.hovered
+            z: 1001  // Au-dessus de globalHoverArea et de tout le reste
+
+            onEntered: {
+                if (!root.startupLock) {
+                    root.hovered = true
+                    hoverTimer.stop()
                 }
             }
         }
