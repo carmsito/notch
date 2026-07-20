@@ -31,6 +31,17 @@ Rectangle {
         return (value || "").replace(/'/g, "'\\''")
     }
 
+    // Le fader "Output Volume" doit piloter le même sink virtuel que le
+    // slider "Sound" (global-audio), pas le sink matériel sélectionné,
+    // sinon les deux contrôles appliquent des gains indépendants et se
+    // désynchronisent.
+    function masterSinkResolvePrefix() {
+        return "target=$(pactl list short sinks 2>/dev/null | awk '$2==\"global-audio\" {print $2; exit}'); " +
+               "if [ -z \"$target\" ]; then " +
+               "target=$(pactl list short sinks 2>/dev/null | awk '$2==\"global_audio\" {print $2; exit}'); " +
+               "fi; "
+    }
+
     function prettyOutputLabel(name, description) {
         var label = (description && description !== "") ? description : name
         if (!label || label === "") {
@@ -176,16 +187,16 @@ Rectangle {
     }
 
     function refreshMaster() {
-        var sinkName = selectedSinkName !== "" ? selectedSinkName : defaultSinkName
-        if (sinkName === "") {
-            masterVolume = 0
-            masterMuted = false
-            return
-        }
+        var fallbackSink = selectedSinkName !== "" ? selectedSinkName : defaultSinkName
+        var escapedFallback = escapeShell(fallbackSink)
+        var fallbackClause = fallbackSink !== ""
+            ? ("if [ -z \"$target\" ]; then target='" + escapedFallback + "'; fi; ")
+            : ""
 
-        var escapedSink = escapeShell(sinkName)
-        getMasterVolume.command = ["sh", "-c", "pactl get-sink-volume '" + escapedSink + "' 2>/dev/null | head -n1 | awk -F'/' '{gsub(/[^0-9]/,\"\",$2); print ($2==\"\"?0:$2)}'"]
-        getMasterMute.command = ["sh", "-c", "pactl get-sink-mute '" + escapedSink + "' 2>/dev/null | awk '{print ($2==\"yes\"?1:0)}'"]
+        getMasterVolume.command = ["sh", "-c", masterSinkResolvePrefix() + fallbackClause +
+            "if [ -n \"$target\" ]; then pactl get-sink-volume \"$target\" 2>/dev/null | head -n1 | awk -F'/' '{gsub(/[^0-9]/,\"\",$2); print ($2==\"\"?0:$2)}'; fi"]
+        getMasterMute.command = ["sh", "-c", masterSinkResolvePrefix() + fallbackClause +
+            "if [ -n \"$target\" ]; then pactl get-sink-mute \"$target\" 2>/dev/null | awk '{print ($2==\"yes\"?1:0)}'; fi"]
         getMasterVolume.running = true
         getMasterMute.running = true
     }
@@ -205,23 +216,28 @@ Rectangle {
         selectedSinkName = sinkName
         outputSelectorOpen = false
         var escapedSink = escapeShell(sinkName)
-        setDefaultSink.command = ["sh", "-c", "pactl set-default-sink '" + escapedSink + "' >/dev/null 2>&1"]
+        // Le sink matériel reste à 100%/démuté : c'est global-audio (piloté
+        // par les deux faders) qui doit rester la seule source de gain.
+        setDefaultSink.command = ["sh", "-c",
+            "pactl set-default-sink '" + escapedSink + "' >/dev/null 2>&1; " +
+            "pactl set-sink-volume '" + escapedSink + "' 100% >/dev/null 2>&1; " +
+            "pactl set-sink-mute '" + escapedSink + "' 0 >/dev/null 2>&1;"]
         setDefaultSink.running = true
         refreshMaster()
     }
 
     function applyMasterVolume(value) {
-        var sinkName = selectedSinkName !== "" ? selectedSinkName : defaultSinkName
-        if (sinkName === "") {
-            return
-        }
+        var fallbackSink = selectedSinkName !== "" ? selectedSinkName : defaultSinkName
+        var escapedFallback = escapeShell(fallbackSink)
+        var fallbackClause = fallbackSink !== ""
+            ? ("if [ -z \"$target\" ]; then target='" + escapedFallback + "'; fi; ")
+            : ""
 
         var volume = Math.max(0, Math.min(100, Math.round(value)))
-        var escapedSink = escapeShell(sinkName)
 
-        setMasterVolumeProc.command = ["sh", "-c",
-                                       "pactl set-sink-volume '" + escapedSink + "' " + volume + "% >/dev/null 2>&1; " +
-                                       (volume > 0 ? ("pactl set-sink-mute '" + escapedSink + "' 0 >/dev/null 2>&1;") : "")]
+        setMasterVolumeProc.command = ["sh", "-c", masterSinkResolvePrefix() + fallbackClause +
+            "if [ -n \"$target\" ]; then pactl set-sink-volume \"$target\" " + volume + "% >/dev/null 2>&1; " +
+            (volume > 0 ? ("pactl set-sink-mute \"$target\" 0 >/dev/null 2>&1; ") : "") + "fi"]
         setMasterVolumeProc.running = true
         masterVolume = volume
         if (volume > 0) {
