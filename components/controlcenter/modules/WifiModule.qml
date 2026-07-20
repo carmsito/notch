@@ -21,7 +21,7 @@ Rectangle {
     Process {
         id: activeConnectionCheck
         running: false
-        command: ["sh", "-c", "nmcli -t -f NAME,TYPE connection show --active | awk -F: 'NR==1{print $1\"|\"$2}'"]
+        command: ["sh", "-c", "nmcli -t -f NAME,TYPE connection show --active | awk -F: '$2==\"802-11-wireless\" || $2==\"wifi\" {print $1\"|\"$2; found=1; exit} $2==\"802-3-ethernet\" || $2==\"ethernet\" {if (!fallback) fallback=$1\"|\"$2} END {if (!found && fallback) print fallback}'"]
         stdout: StdioCollector {
             onStreamFinished: {
                 var out = (this.text || "").trim()
@@ -32,7 +32,7 @@ Rectangle {
                 }
                 var parts = out.split("|")
                 wifiModule.connectionName = parts[0]
-                wifiModule.connectionType = parts[1]
+                wifiModule.connectionType = parts[1] === "802-11-wireless" ? "wifi" : parts[1]
             }
         }
     }

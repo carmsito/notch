@@ -1,0 +1,9 @@
+{
+  "name": "com.videoisland.bridge",
+  "description": "Video Island bridge (writes payload to file)",
+  "path": "/home/emmanuel/dotfiles/quickshell/components/notch/modules/video_bridge_host.py",
+  "type": "stdio",
+  "allowed_origins": [
+    "chrome-extension://__EXTENSION_ID__/"
+  ]
+}

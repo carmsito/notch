@@ -1,0 +1,17 @@
+{
+  "name": "Video Island Bridge",
+  "description": "Sends current page video URL and time to Quickshell",
+  "version": "0.1.0",
+  "manifest_version": 3,
+  "permissions": ["nativeMessaging"],
+  "content_scripts": [
+    {
+      "matches": ["http://*/*", "https://*/*"],
+      "js": ["content.js"],
+      "run_at": "document_idle"
+    }
+  ],
+  "background": {
+    "service_worker": "background.js"
+  }
+}

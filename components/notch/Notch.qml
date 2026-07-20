@@ -34,10 +34,22 @@ Item {
     property var monitorStates: ({})
     property string hostMonitorName: ""
     property bool runtimeActive: true
+    property string videoIslandStatePath: Quickshell.statePath("video_island_state.json")
+    property bool videoIslandEnabled: false
+    property bool videoIslandPromptDismissed: false
+    property bool videoIslandPromptVisible: false
+    property bool videoPreviewActive: false
+    property int compactScrollAccumulator: 0
+    property string effectiveVideoUrl: videoBridge.hasData ? videoBridge.url : mprisWatcher.url
+    property double effectiveVideoTime: videoBridge.hasData ? videoBridge.time : mprisWatcher.position
+    property bool videoEmbedEnabled: true
     // Empêche le hover initial de s'activer au démarrage (barre démarre compacte)
     property bool startupLock: true
 
     signal monitorToggled(string monitorName, bool enabled)
+
+    onVideoIslandEnabledChanged: updateVideoPrompt()
+    onVideoIslandPromptDismissedChanged: updateVideoPrompt()
 
     function isPrimaryMonitor(monitorName) {
         return monitorName === "eDP-1" || monitorName === "eDP-2"
@@ -75,10 +87,76 @@ Item {
         return state === undefined ? true : state
     }
 
+    function loadVideoIslandState() {
+        try {
+            var raw = videoIslandFile.text()
+            if (!raw || raw.trim() === "") {
+                videoIslandEnabled = false
+                videoIslandPromptDismissed = false
+                return
+            }
+            var parsed = JSON.parse(raw)
+            videoIslandEnabled = !!parsed.enabled
+            videoIslandPromptDismissed = !!parsed.promptDismissed
+        } catch (error) {
+            console.warn("Failed to load video island state:", error)
+            videoIslandEnabled = false
+            videoIslandPromptDismissed = false
+        }
+    }
+
+    function saveVideoIslandState() {
+        try {
+            var payload = JSON.stringify({
+                enabled: videoIslandEnabled,
+                promptDismissed: videoIslandPromptDismissed
+            })
+            videoIslandFile.setText(payload)
+        } catch (error) {
+            console.warn("Failed to save video island state:", error)
+        }
+    }
+
+    function updateVideoPrompt() {
+        var shouldPrompt = !videoIslandEnabled && !videoIslandPromptDismissed &&
+                           mprisWatcher.isBrowserPlayer &&
+                           mprisWatcher.playbackStatus !== "Stopped"
+        if (shouldPrompt) {
+            videoIslandPromptVisible = true
+        } else if (!mprisWatcher.isPlaying) {
+            videoIslandPromptVisible = false
+        }
+    }
+
+    function runMprisCommand(args) {
+        if (!args || args.length === 0) {
+            return
+        }
+        mprisCommandProc.command = args
+        mprisCommandProc.running = true
+    }
+
+    function toggleMprisPlayPause() {
+        if (!mprisWatcher.playerName) {
+            return
+        }
+        runMprisCommand([
+            "python3",
+            "/home/emmanuel/dotfiles/quickshell/components/notch/modules/mpris_ctl.py",
+            "--player",
+            mprisWatcher.playerName,
+            "--action",
+            "playpause"
+        ])
+    }
+
     // Navigation entre conteneurs
-    property var containers: ["Control Center", "Performance", "Notifications"]
+    property var containers: ["Control Center", "Performance", "Notifications", "Video"]
     property int currentContainerIndex: 0
     property string currentContainerTitle: containers[currentContainerIndex]
+    property int videoContainerIndex: containers.indexOf("Video")
+    property bool compactContainersEnabled: true
+    property bool compactVideoActive: !hovered && currentContainerIndex === videoContainerIndex
     property bool controlCenterActive: runtimeActive && hovered && currentContainerIndex === 0 &&
                                        !showingBluetoothDevices && !showingWifiNetworks && !showingSoundCenter
     property bool performanceActive: runtimeActive && hovered && currentContainerIndex === 1
@@ -105,6 +183,31 @@ Item {
         pollingEnabled: root.runtimeActive
     }
 
+    FileView {
+        id: videoIslandFile
+        path: root.videoIslandStatePath
+        preload: true
+        blockLoading: true
+        printErrors: false
+        onLoaded: root.loadVideoIslandState()
+        onFileChanged: root.loadVideoIslandState()
+    }
+
+    MprisWatcher {
+        id: mprisWatcher
+        active: root.runtimeActive
+        onUpdated: root.updateVideoPrompt()
+    }
+
+    VideoBridge {
+        id: videoBridge
+    }
+
+    Process {
+        id: mprisCommandProc
+        running: false
+    }
+
     // Timer pour éviter le clignotement du hover
     Timer {
         id: hoverTimer
@@ -121,8 +224,10 @@ Item {
                 // Reset le panneau son avancé
                 root.showingSoundCenter = false
                 
-                // Reset container to default
-                root.currentContainerIndex = 0
+                // Reset container to default (skip if compact containers are enabled)
+                if (!root.compactContainersEnabled) {
+                    root.currentContainerIndex = 0
+                }
             }
         }
     }
@@ -218,7 +323,7 @@ Item {
             spacing: 10
             
             // Gestion visibilité globale (disparait si la notch s'ouvre en mode expanded)
-            opacity: root.hovered ? 0 : 1
+            opacity: (root.hovered || root.compactVideoActive) ? 0 : 1
             visible: opacity > 0 
             Behavior on opacity { NumberAnimation { duration: 200 } }
 
@@ -265,7 +370,7 @@ Item {
             color: "white"
             
             // Disparait si on joue avec les Workspaces ou si hover
-            visible: !wsWidget.isInteracting && !root.hovered
+            visible: !wsWidget.isInteracting && !root.hovered && !root.compactVideoActive
         }
 
         // 3. CONNEXION ICONS (DROITE) - Wi-Fi/Ethernet/Bluetooth
@@ -275,7 +380,7 @@ Item {
             anchors.verticalCenter: parent.verticalCenter
             spacing: 8
 
-            opacity: root.hovered ? 0 : 1
+            opacity: (root.hovered || root.compactVideoActive) ? 0 : 1
             // Disparait si on joue avec les Workspaces
             visible: opacity > 0 && !wsWidget.isInteracting
             
@@ -452,6 +557,42 @@ Item {
                     sourceSize.width: 16
                     sourceSize.height: 16
                     visible: parent.connectionType === "" && !parent.bluetoothEnabled
+                }
+            }
+        }
+
+        // 3b. COMPACT VIDEO CONTAINER (OVERLAY)
+        Item {
+            id: compactVideoOverlay
+            anchors.fill: parent
+            visible: root.compactVideoActive
+            z: 50
+
+            VideoContainer {
+                anchors.fill: parent
+                compact: true
+                featureEnabled: root.videoIslandEnabled
+                embedEnabled: root.videoEmbedEnabled
+                previewActive: root.videoPreviewActive
+
+                title: mprisWatcher.title
+                artist: mprisWatcher.artist
+                playbackStatus: mprisWatcher.playbackStatus
+                position: mprisWatcher.position
+                length: mprisWatcher.length
+                playerName: mprisWatcher.playerName
+                trackId: mprisWatcher.trackId
+
+                url: root.effectiveVideoUrl
+                urlTime: root.effectiveVideoTime
+
+                onPlayPauseRequested: root.toggleMprisPlayPause()
+                onPreviewRequested: root.videoPreviewActive = true
+                onPreviewClosed: root.videoPreviewActive = false
+                onActivateRequested: {
+                    root.videoIslandEnabled = true
+                    root.videoIslandPromptVisible = false
+                    root.saveVideoIslandState()
                 }
             }
         }
@@ -965,6 +1106,77 @@ Item {
                                         }
                                     }
                                 }
+
+                                Rectangle {
+                                    id: livepaperPauseChip
+
+                                    property bool paperPaused: false
+
+                                    height: 24
+                                    width: pauseChipContent.width + 16
+                                    radius: 12
+                                    color: paperPaused ? "#65FFFFFF" : "#25202020"
+                                    border.color: paperPaused ? "#82FFFFFF" : "#45FFFFFF"
+                                    border.width: 1
+
+                                    Behavior on color { ColorAnimation { duration: 150 } }
+                                    Behavior on border.color { ColorAnimation { duration: 150 } }
+
+                                    Process {
+                                        id: livepaperPauseToggleProc
+
+                                        property bool nextPaused: false
+
+                                        command: ["sh", "-c", nextPaused ? "mkdir -p \"$HOME/.cache/skwd-mpvpaper\"; : > \"$HOME/.cache/skwd-mpvpaper/eDP-1.manual-pause\"; printf '{\"command\":[\"set_property\",\"pause\",true]}\\n' | socat - UNIX-CONNECT:/tmp/mpvpaper-eDP-1.sock" : "rm -f \"$HOME/.cache/skwd-mpvpaper/eDP-1.manual-pause\"; WS=$(hyprctl -j monitors | jq -r '.[] | select(.name==\"eDP-1\") | .activeWorkspace.id'); SP=$(hyprctl -j clients | jq -r --argjson w \"${WS:-null}\" 'any(.[]; .workspace.id==$w and ((.fullscreen // 0) > 0))'); printf '{\"command\":[\"set_property\",\"pause\",%s]}\\n' \"$SP\" | socat - UNIX-CONNECT:/tmp/mpvpaper-eDP-1.sock"]
+                                        onExited: livepaperPauseChip.paperPaused = nextPaused
+                                    }
+
+                                    Item {
+                                        id: pauseChipContent
+                                        anchors.centerIn: parent
+                                        width: pauseChipIndicator.width + 6 + pauseChipLabel.implicitWidth
+                                        height: Math.max(pauseChipIndicator.height, pauseChipLabel.implicitHeight)
+
+                                        Rectangle {
+                                            id: pauseChipIndicator
+                                            anchors.left: parent.left
+                                            anchors.verticalCenter: parent.verticalCenter
+                                            width: 8
+                                            height: 8
+                                            radius: 4
+                                            color: livepaperPauseChip.paperPaused ? "#E0A481" : "#81E08D"
+                                        }
+
+                                        Text {
+                                            id: pauseChipLabel
+                                            x: pauseChipIndicator.width + 6
+                                            anchors.verticalCenter: parent.verticalCenter
+                                            text: livepaperPauseChip.paperPaused ? "Paused" : "Playing"
+                                            color: livepaperPauseChip.paperPaused ? "#111111" : "#D9D9D9"
+                                            font.pixelSize: 12
+                                            font.bold: true
+                                            font.family: "SF Pro Display"
+                                        }
+                                    }
+
+                                    MouseArea {
+                                        anchors.fill: parent
+                                        hoverEnabled: true
+                                        cursorShape: Qt.PointingHandCursor
+
+                                        onClicked: {
+                                            livepaperPauseToggleProc.nextPaused = !livepaperPauseChip.paperPaused
+                                            livepaperPauseToggleProc.running = true
+                                        }
+
+                                        onEntered: parent.scale = 1.04
+                                        onExited: parent.scale = 1.0
+                                    }
+
+                                    Behavior on scale {
+                                        NumberAnimation { duration: 120; easing.type: Easing.OutCubic }
+                                    }
+                                }
                             }
                         }
                     }
@@ -979,6 +1191,78 @@ Item {
                         anchors.fill: parent
                         anchors.margins: 5
                     }
+                }
+
+                // Container 4: Video
+                Item {
+                    width: 460
+                    height: contentViewport.height
+
+                    VideoContainer {
+                        anchors.fill: parent
+                        compact: false
+                        featureEnabled: root.videoIslandEnabled
+                        embedEnabled: root.videoEmbedEnabled
+                        previewActive: root.videoPreviewActive
+
+                        title: mprisWatcher.title
+                        artist: mprisWatcher.artist
+                        playbackStatus: mprisWatcher.playbackStatus
+                        position: mprisWatcher.position
+                        length: mprisWatcher.length
+                        playerName: mprisWatcher.playerName
+                        trackId: mprisWatcher.trackId
+
+                        url: root.effectiveVideoUrl
+                        urlTime: root.effectiveVideoTime
+
+                        onPlayPauseRequested: root.toggleMprisPlayPause()
+                        onPreviewRequested: root.videoPreviewActive = true
+                        onPreviewClosed: root.videoPreviewActive = false
+                        onActivateRequested: {
+                            root.videoIslandEnabled = true
+                            root.videoIslandPromptVisible = false
+                            root.saveVideoIslandState()
+                        }
+                    }
+                }
+            }
+        }
+
+        // Compact scroll navigation (mode compact uniquement)
+        MouseArea {
+            id: compactScrollArea
+            anchors.fill: parent
+            hoverEnabled: true
+            acceptedButtons: Qt.NoButton
+            enabled: root.compactContainersEnabled && !root.hovered
+
+            onWheel: {
+                if (wsWidget.isInteracting) {
+                    return
+                }
+
+                if ((root.compactScrollAccumulator > 0 && wheel.angleDelta.y < 0) ||
+                    (root.compactScrollAccumulator < 0 && wheel.angleDelta.y > 0)) {
+                    root.compactScrollAccumulator = 0
+                }
+
+                root.compactScrollAccumulator += wheel.angleDelta.y
+
+                if (root.compactScrollAccumulator >= 800) {
+                    if (root.currentContainerIndex > 0) {
+                        root.currentContainerIndex--
+                    } else {
+                        root.currentContainerIndex = root.containers.length - 1
+                    }
+                    root.compactScrollAccumulator = 0
+                } else if (root.compactScrollAccumulator <= -800) {
+                    if (root.currentContainerIndex < root.containers.length - 1) {
+                        root.currentContainerIndex++
+                    } else {
+                        root.currentContainerIndex = 0
+                    }
+                    root.compactScrollAccumulator = 0
                 }
             }
         }
@@ -1087,6 +1371,26 @@ Item {
             onClose: {
                 root.showingSoundCenter = false
             }
+        }
+    }
+
+    VideoActivationPrompt {
+        id: videoPrompt
+        anchors.horizontalCenter: notchRect.horizontalCenter
+        anchors.bottom: notchRect.top
+        anchors.bottomMargin: 8
+        visible: root.videoIslandPromptVisible
+
+        onAccepted: {
+            root.videoIslandEnabled = true
+            root.videoIslandPromptVisible = false
+            root.saveVideoIslandState()
+        }
+
+        onDismissed: {
+            root.videoIslandPromptDismissed = true
+            root.videoIslandPromptVisible = false
+            root.saveVideoIslandState()
         }
     }
 }

@@ -10,6 +10,7 @@ Item {
     property int count
     property string time
     property string preview
+    property string title
     
     // Stack Card 2 (Bottom)
     Rectangle {
@@ -127,7 +128,7 @@ Item {
             
             // Content
             Text {
-                text: root.appName // Title (often same as app name or specific title)
+                text: root.title !== "" ? root.title : root.appName
                 color: "white"
                 font.bold: true
                 font.pixelSize: 13

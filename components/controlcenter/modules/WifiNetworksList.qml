@@ -254,6 +254,9 @@ Item {
     onVisibleChanged: {
         if (visible) {
             scanNetworks = []
+            checkWifi.running = true
+            listSaved.running = true
+            activeConn.running = true
             scanProc.running = true
         } else {
             scanProc.running = false
@@ -1204,7 +1207,7 @@ Item {
     Process {
         id: activeConn
         running: false
-        command: ["sh", "-c", "nmcli -t -f NAME,TYPE connection show --active | awk -F: 'NR==1{print $1\"|\"$2}'"]
+        command: ["sh", "-c", "nmcli -t -f NAME,TYPE connection show --active | awk -F: '$2==\"802-11-wireless\" || $2==\"wifi\" {print $1\"|\"$2; found=1; exit} $2==\"802-3-ethernet\" || $2==\"ethernet\" {if (!fallback) fallback=$1\"|\"$2} END {if (!found && fallback) print fallback}'"]
         stdout: StdioCollector {
             onStreamFinished: {
                 var out = (this.text || "").trim()
@@ -1215,7 +1218,7 @@ Item {
                 }
                 var parts = out.split("|")
                 root.activeName = parts[0]
-                root.activeType = parts[1]
+                root.activeType = parts[1] === "802-11-wireless" ? "wifi" : parts[1]
             }
         }
     }
@@ -1223,22 +1226,32 @@ Item {
     Process {
         id: scanProc
         running: false
-        command: ["sh", "-c", "nmcli -t -f SSID,SIGNAL,SECURITY device wifi list | sed 's/:/|/g'"]
+        command: ["sh", "-c", "nmcli -t -f ACTIVE,SSID,SIGNAL,SECURITY device wifi list | sed 's/:/|/g'"]
         stdout: StdioCollector {
             onStreamFinished: {
                 var out = this.text ? this.text.trim() : ""
                 var arr = []
+                var activeSsid = ""
                 if (out !== "") {
                     var lines = out.split("\n")
                     for (var i = 0; i < lines.length; i++) {
                         var parts = lines[i].split("|")
-                        arr.push({ssid: parts[0], signal: parts[1], security: parts[2]})
+                        var isActive = parts[0] === "yes"
+                        var ssid = parts[1] || ""
+                        if (isActive && ssid !== "") {
+                            activeSsid = ssid
+                        }
+                        arr.push({active: isActive, ssid: ssid, signal: parts[2], security: parts[3]})
                     }
                     arr.sort(function(a, b) {
                         return parseInt(b.signal || "0") - parseInt(a.signal || "0")
                     })
                 }
                 root.scanNetworks = arr
+                if (activeSsid !== "") {
+                    root.activeName = activeSsid
+                    root.activeType = "wifi"
+                }
             }
         }
     }
