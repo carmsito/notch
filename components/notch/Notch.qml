@@ -372,6 +372,24 @@ Item {
             }
         }
 
+        // Ondulation audio-réactive (test) : ne s'affiche qu'en mode compact quand de la
+        // musique joue, collée au bord bas de la barre.
+        AudioWaveform {
+            id: audioWaveform
+            anchors.left: parent.left
+            anchors.leftMargin: 30
+            anchors.right: parent.right
+            anchors.rightMargin: 10
+            anchors.top: parent.bottom
+            height: 18
+            waveColor: notchRect.fillColor
+            active: !root.hovered && mprisWatcher.isPlaying
+            opacity: active ? 1 : 0
+            visible: opacity > 0
+
+            Behavior on opacity { NumberAnimation { duration: 250 } }
+        }
+
         // --- CONTENU ---
 
         // ==================================================
