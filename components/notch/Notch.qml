@@ -1,4 +1,5 @@
 import QtQuick 2.15
+import QtQuick.Shapes
 import Quickshell
 import Quickshell.Io
 import Quickshell.Hyprland
@@ -20,7 +21,7 @@ Item {
     property int expandedRadius: 15
 
     property int collapsedWidth: 700 
-    property int expandedWidth: 475  // Largeur pour contenir les modules
+    property int expandedWidth: 600  // Largeur pour contenir les modules + laisser respirer la courbe des coins
 
     property int hoverTriggerWidth: 150 
 
@@ -275,11 +276,11 @@ Item {
         property color strokeColor: hovered ? "#30FFFFFF" : "#33FFFFFF"
         property color color: fillColor
 
-        Behavior on width { NumberAnimation { duration: 100; easing.type: Easing.OutExpo } }
-        Behavior on height { NumberAnimation { duration: 100; easing.type: Easing.OutExpo } }
-        Behavior on chamfer { NumberAnimation { duration: 100; easing.type: Easing.OutExpo } }
-        Behavior on fillColor { ColorAnimation { duration: 100 } }
-        Behavior on strokeColor { ColorAnimation { duration: 100 } }
+        Behavior on width { NumberAnimation { duration: 250; easing.type: Easing.OutExpo } }
+        Behavior on height { NumberAnimation { duration: 400; easing.type: Easing.OutExpo } }
+        Behavior on chamfer { NumberAnimation { duration: 500; easing.type: Easing.OutExpo } }
+        Behavior on fillColor { ColorAnimation { duration: 200 } }
+        Behavior on strokeColor { ColorAnimation { duration: 300 } }
 
         // Forme sharp : haut carré (collé pixel-perfect à l'écran), coins bas coupés
         // en diagonale à 45° (chanfrein façon coin d'octogone) — aucun arrondi.
@@ -290,6 +291,7 @@ Item {
             id: notchShapeRoot
             anchors.fill: parent
             clip: true
+            visible: !root.hovered
 
             // Corps du haut (plein largeur, jusqu'au début du chanfrein)
             Rectangle {
@@ -372,6 +374,82 @@ Item {
             }
         }
 
+        // Forme "smart corner" en mode expanded : le panneau reste collé/attaché à
+        // l'écran en haut, mais ses coins hauts se creusent en S (concave) avant de
+        // redescendre en ligne droite, façon bulle accrochée — cf. Popout.qml
+        // (attachedTop) du repo dhrruvsharma/shell. QtQuick.Shapes est disponible ici
+        // (testé isolément), contrairement au blocage rencontré plus tôt sur ce fichier.
+        Shape {
+            id: expandedShapeRoot
+            anchors.fill: parent
+            visible: root.hovered
+            smooth: true
+            antialiasing: true
+            layer.enabled: true
+            layer.smooth: true
+            layer.samples: 4
+
+            // Rayon large (comme Popout.qml, radius:50) pour une courbe bien plus
+            // progressive que le petit chanfrein du mode compact.
+            property real r: Math.min(45, notchRect.width / 2, notchRect.height / 2)
+            property real clampedRH: Math.min(r, notchRect.height / 2)
+
+            ShapePath {
+                fillColor: notchRect.fillColor
+                strokeColor: notchRect.strokeColor
+                strokeWidth: 1
+                joinStyle: ShapePath.RoundJoin
+                capStyle: ShapePath.RoundCap
+
+                startX: 0
+                startY: 0
+
+                // Coin haut-gauche : creux concave (attache à l'écran)
+                PathArc {
+                    x: expandedShapeRoot.r
+                    y: expandedShapeRoot.clampedRH
+                    radiusX: expandedShapeRoot.r
+                    radiusY: expandedShapeRoot.clampedRH
+                }
+                PathLine {
+                    x: expandedShapeRoot.r
+                    y: Math.max(notchRect.height - expandedShapeRoot.r, notchRect.height / 2)
+                }
+                // Coin bas-gauche : convexe classique
+                PathArc {
+                    x: expandedShapeRoot.r * 2
+                    y: notchRect.height
+                    radiusX: expandedShapeRoot.r
+                    radiusY: expandedShapeRoot.clampedRH
+                    direction: PathArc.Counterclockwise
+                }
+                PathLine {
+                    x: notchRect.width - expandedShapeRoot.r * 2
+                    y: notchRect.height
+                }
+                // Coin bas-droit : convexe classique
+                PathArc {
+                    x: notchRect.width - expandedShapeRoot.r
+                    y: Math.max(notchRect.height - expandedShapeRoot.r, notchRect.height / 2)
+                    radiusX: expandedShapeRoot.r
+                    radiusY: expandedShapeRoot.clampedRH
+                    direction: PathArc.Counterclockwise
+                }
+                PathLine {
+                    x: notchRect.width - expandedShapeRoot.r
+                    y: expandedShapeRoot.clampedRH
+                }
+                // Coin haut-droit : creux concave (attache à l'écran)
+                PathArc {
+                    x: notchRect.width
+                    y: 0
+                    radiusX: expandedShapeRoot.r
+                    radiusY: expandedShapeRoot.clampedRH
+                }
+                PathLine { x: 0; y: 0 }
+            }
+        }
+
         // Ondulation audio-réactive (test) : ne s'affiche qu'en mode compact quand de la
         // musique joue, collée au bord bas de la barre.
         AudioWaveform {
@@ -381,7 +459,7 @@ Item {
             anchors.right: parent.right
             anchors.rightMargin: 10
             anchors.top: parent.bottom
-            anchors.topMargin: -1
+            anchors.topMargin: -3
             height: 18
             waveColor: notchRect.fillColor
             active: !root.hovered && mprisWatcher.isPlaying
@@ -813,9 +891,9 @@ Item {
             // Bouton cadenas (Lock/Unlock)
             Rectangle {
                 anchors.right: parent.right
-                anchors.rightMargin: 15
+                anchors.rightMargin: 60
                 anchors.top: parent.top
-                anchors.topMargin: 15
+                anchors.topMargin:20
                 width: 32
                 height: 32
                 radius: 16
