@@ -381,6 +381,7 @@ Item {
             anchors.right: parent.right
             anchors.rightMargin: 10
             anchors.top: parent.bottom
+            anchors.topMargin: -1
             height: 18
             waveColor: notchRect.fillColor
             active: !root.hovered && mprisWatcher.isPlaying
