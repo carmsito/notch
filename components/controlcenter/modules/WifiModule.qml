@@ -21,7 +21,10 @@ Rectangle {
     Process {
         id: activeConnectionCheck
         running: false
-        command: ["sh", "-c", "nmcli -t -f NAME,TYPE connection show --active | awk -F: '$2==\"802-11-wireless\" || $2==\"wifi\" {print $1\"|\"$2; found=1; exit} $2==\"802-3-ethernet\" || $2==\"ethernet\" {if (!fallback) fallback=$1\"|\"$2} END {if (!found && fallback) print fallback}'"]
+        // Priorité à Ethernet : nmcli peut lister le Wi-Fi comme "active" (radio jointe à un
+        // réseau) même quand le câble Ethernet porte tout le trafic — il ne faut pas afficher
+        // le Wi-Fi dans ce cas.
+        command: ["sh", "-c", "nmcli -t -f NAME,TYPE connection show --active | awk -F: '$2==\"802-3-ethernet\" || $2==\"ethernet\" {print $1\"|\"$2; found=1; exit} $2==\"802-11-wireless\" || $2==\"wifi\" {if (!fallback) fallback=$1\"|\"$2} END {if (!found && fallback) print fallback}'"]
         stdout: StdioCollector {
             onStreamFinished: {
                 var out = (this.text || "").trim()

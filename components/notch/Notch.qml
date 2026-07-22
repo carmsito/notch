@@ -1073,7 +1073,11 @@ Item {
                                 id: wifiMod
                                 width: 225
                                 height: 70
-                                pollingEnabled: root.controlCenterActive
+                                // Cette instance alimente aussi l'icône du mode compact (tout en haut),
+                                // donc le polling ne peut pas dépendre du hover/panneau ouvert (sinon
+                                // l'icône reste figée sur son état par défaut tant qu'on n'a pas survolé
+                                // la barre une première fois — comme la batterie, ça doit tourner en continu).
+                                pollingEnabled: root.runtimeActive
                                 onClicked: {
                                     root.showingSoundCenter = false
                                     root.showingWifiNetworks = true
@@ -1084,8 +1088,9 @@ Item {
                                 id: bluetoothMod
                                 width: 225
                                 height: 70
-                                pollingEnabled: root.controlCenterActive
-                                
+                                // Même raison que wifiMod ci-dessus : alimente l'icône du mode compact.
+                                pollingEnabled: root.runtimeActive
+
                                 onClicked: {
                                     root.showingSoundCenter = false
                                     root.showingBluetoothDevices = true
