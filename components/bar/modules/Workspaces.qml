@@ -12,6 +12,32 @@ Item {
     property int hoveredWorkspaceId: -1 
     property int refreshTrigger: 0
     property var iconSourceCache: ({})
+    property var ignoredIconTokens: ({
+        "application": true,
+        "app": true,
+        "bin": true,
+        "browser": true,
+        "client": true,
+        "com": true,
+        "desktop": true,
+        "electron": true,
+        "exe": true,
+        "flatpak": true,
+        "gui": true,
+        "io": true,
+        "launch": true,
+        "launcher": true,
+        "linux": true,
+        "net": true,
+        "org": true,
+        "python": true,
+        "shell": true,
+        "stable": true,
+        "unknown": true,
+        "wayland": true,
+        "www": true,
+        "x11": true
+    })
 
     // Mots-clés pour détecter les apps depuis leur titre
     property var appKeywords: {
@@ -31,13 +57,41 @@ Item {
         "code": ["visual-studio-code", "com.visualstudio.code", "vscode"],
         "chrome": ["google-chrome", "google-chrome-stable"],
         "discord": ["discord", "Discord"],
-        "firefox": ["firefox", "firefox-esr"],
+        "firefox": ["firefox", "firefox-esr", "org.mozilla.firefox"],
         "thunar": ["thunar", "Thunar"],
         "kitty": ["kitty", "kitty-icon"],
         "alacritty": ["alacritty", "Alacritty"],
         "dbeaver": ["dbeaver", "dbeaver-ce"],
-        "insomnia": ["insomnia", "Insomnia"]
+        "insomnia": ["insomnia", "Insomnia"],
+        "drkonqi": ["org.kde.drkonqi", "org.kde.drkonqi.coredump.gui"],
+        "systemsettings": ["systemsettings", "org.kde.systemsettings"],
+        "steam": ["steam", "steamwebhelper"],
+        "obsidian": ["obsidian", "md.obsidian.obsidian"],
+        "spotify": ["spotify"],
+        "vlc": ["vlc", "org.videolan.vlc"],
+        "pavucontrol": ["pavucontrol", "org.pulseaudio.pavucontrol"],
+        "nautilus": ["org.gnome.nautilus", "nautilus"]
     }
+
+    property var appCanonicalAliases: ({
+        "brave-browser": "brave",
+        "brave": "brave",
+        "chromium-browser": "chromium",
+        "code-url-handler": "code",
+        "codium-url-handler": "vscodium",
+        "discordcanary": "discord",
+        "firefox-bin": "firefox",
+        "firefoxdeveloperedition": "firefox",
+        "google-chrome": "chrome",
+        "google-chrome-stable": "chrome",
+        "org-gnome-nautilus": "nautilus",
+        "org-kde-drkonqi-coredump-gui": "drkonqi",
+        "org-mozilla-firefox": "firefox",
+        "org-pulseaudio-pavucontrol": "pavucontrol",
+        "org-videolan-vlc": "vlc",
+        "steamwebhelper": "steam",
+        "visual-studio-code": "code"
+    })
     
     // Fonction pour générer automatiquement tous les chemins possibles
     function generateIconCandidates(appName) {
@@ -58,18 +112,50 @@ Item {
             candidates.push(cleaned);
         }
 
+        function pushMeaningfulToken(token) {
+            var cleaned = normalizeAppName(token);
+            if (cleaned === "" || ignoredIconTokens[cleaned]) {
+                return;
+            }
+            pushName(resolveCanonicalAppName(cleaned));
+            pushName(cleaned);
+        }
+
+        var canonicalName = resolveCanonicalAppName(appName);
+
         // Variations spécifiques d'abord (souvent les bons noms d'icône)
-        if (appNameVariations[appNameLower]) {
-            for (var i = 0; i < appNameVariations[appNameLower].length; i++) {
-                pushName(appNameVariations[appNameLower][i]);
+        if (appNameVariations[canonicalName]) {
+            for (var i = 0; i < appNameVariations[canonicalName].length; i++) {
+                pushName(appNameVariations[canonicalName][i]);
             }
         }
 
+        pushName(canonicalName);
         pushName(appNameLower);
         pushName(appName);
         pushName(appNameLower.replace(/\s+/g, "-"));
         pushName(appNameLower.replace(/\s+/g, "_"));
         pushName(appNameLower.replace(/\s+/g, ""));
+
+        if (appNameLower.indexOf(".") !== -1) {
+            pushName(appNameLower.replace(/\./g, "-"));
+            pushName(appNameLower.replace(/\./g, "_"));
+        }
+
+        var parts = appNameLower.split(/[._-]+/).filter(function(part) { return part !== ""; });
+        for (var suffixLength = Math.min(parts.length, 3); suffixLength >= 1; suffixLength--) {
+            var suffix = parts.slice(parts.length - suffixLength);
+            pushMeaningfulToken(suffix.join("-"));
+            pushMeaningfulToken(suffix.join("_"));
+            pushMeaningfulToken(suffix.join("."));
+        }
+
+        for (var p = parts.length - 1; p >= 0; p--) {
+            pushMeaningfulToken(parts[p]);
+        }
+
+        pushName("application-x-executable");
+        pushName("application-default-icon");
 
         return candidates;
     }
@@ -81,12 +167,73 @@ Item {
             return "";
         }
         cleaned = cleaned.replace(/^[`'"]+|[`'"]+$/g, "");
+        cleaned = cleaned.replace(/^\.+|\.+$/g, "");
         cleaned = cleaned.split(/\s+/)[0];
         cleaned = cleaned.replace(/[^a-z0-9._-]/g, "");
         if (cleaned === "" || cleaned === "~" || cleaned === "-" || cleaned === "_") {
             return "";
         }
         return cleaned;
+    }
+
+    function resolveCanonicalAppName(value) {
+        var cleaned = normalizeAppName(value);
+        if (cleaned === "") {
+            return "";
+        }
+
+        if (appCanonicalAliases[cleaned]) {
+            return appCanonicalAliases[cleaned];
+        }
+
+        if (appNameVariations[cleaned]) {
+            return cleaned;
+        }
+
+        for (var appName in appNameVariations) {
+            var variations = appNameVariations[appName];
+            for (var i = 0; i < variations.length; i++) {
+                if (normalizeAppName(variations[i]) === cleaned) {
+                    return appName;
+                }
+            }
+        }
+
+        var parts = cleaned.split(/[._-]+/);
+        for (var index = parts.length - 1; index >= 0; index--) {
+            var token = normalizeAppName(parts[index]);
+            if (token === "" || ignoredIconTokens[token]) {
+                continue;
+            }
+            if (appCanonicalAliases[token]) {
+                return appCanonicalAliases[token];
+            }
+            if (appNameVariations[token] || appKeywords[token]) {
+                return token;
+            }
+        }
+
+        return cleaned;
+    }
+
+    function shouldIgnoreToplevel(tl) {
+        if (!tl) {
+            return true;
+        }
+
+        var ipc = tl.lastIpcObject || {};
+        var className = normalizeAppName(ipc.class || ipc.initialClass || tl.appId || "");
+        var title = (tl.title || ipc.title || "").toLowerCase();
+
+        if (className === "antigravity" || className === "quickshell") {
+            return true;
+        }
+
+        if (title.indexOf("barcontainer.qml") !== -1 || title.indexOf("quickshell - antigravity") !== -1) {
+            return true;
+        }
+
+        return false;
     }
 
     function getCachedIconSource(key) {
@@ -124,19 +271,22 @@ Item {
         
         // Fallback: premier mot du titre
         var token = title.split(/[\s\-–—:]/)[0];
-        return normalizeAppName(token);
+        return resolveCanonicalAppName(token);
     }
 
     // Fonction helper pour obtenir les icônes candidates
     function getIconCandidates(appName) {
-        return generateIconCandidates(appName);
+        return generateIconCandidates(resolveCanonicalAppName(appName));
     }
 
     // Fonction helper pour preview popup
     function getPreviewIcon(className) {
         if (!className) return "";
         if (className === "~") return "";
-        var lowerClass = className.toLowerCase();
+        var lowerClass = resolveCanonicalAppName(className);
+        if (lowerClass === "") {
+            return "";
+        }
         
         // Obtenir tous les candidats et retourner le premier du thème
         var candidates = generateIconCandidates(lowerClass);
@@ -302,7 +452,7 @@ Item {
                             var count = 0;
                             var currentWsId = Hyprland.focusedMonitor && Hyprland.focusedMonitor.activeWorkspace ? Hyprland.focusedMonitor.activeWorkspace.id : -1;
                             for (var i = 0; i < Hyprland.toplevels.length; i++) {
-                                if (Hyprland.toplevels[i].workspace.id === currentWsId) {
+                                if (Hyprland.toplevels[i].workspace.id === currentWsId && !root.shouldIgnoreToplevel(Hyprland.toplevels[i])) {
                                     count++;
                                 }
                             }
@@ -315,7 +465,7 @@ Item {
                                 id: compactAppDelegate
                                 property var tl: modelData
                                 property int currentWsId: Hyprland.focusedMonitor && Hyprland.focusedMonitor.activeWorkspace ? Hyprland.focusedMonitor.activeWorkspace.id : -1
-                                property bool belongsToCurrentWs: tl.workspace.id === currentWsId
+                                property bool belongsToCurrentWs: tl.workspace.id === currentWsId && !root.shouldIgnoreToplevel(tl)
                                 
                                 visible: belongsToCurrentWs
                                 width: belongsToCurrentWs ? 16 : 0
@@ -337,7 +487,7 @@ Item {
                                     if (!tl) return "";
                                     
                                     var ipc = tl.lastIpcObject || {};
-                                    var classHint = root.normalizeAppName((ipc.class || tl.appId || ""));
+                                    var classHint = root.resolveCanonicalAppName(ipc.class || ipc.initialClass || tl.appId || "");
                                     var title = tl.title || "";
                                     var c = classHint !== "" ? classHint : root.detectAppFromTitle(title);
                                     
@@ -507,7 +657,7 @@ Item {
                                 property int previewAppCount: {
                                     var count = 0;
                                     for (var i = 0; i < Hyprland.toplevels.length; i++) {
-                                        if (Hyprland.toplevels[i].workspace.id === wsDelegate.wsId) {
+                                        if (Hyprland.toplevels[i].workspace.id === wsDelegate.wsId && !root.shouldIgnoreToplevel(Hyprland.toplevels[i])) {
                                             count++;
                                         }
                                     }
@@ -555,7 +705,7 @@ Item {
                                             model: Hyprland.toplevels
                                             delegate: Item {
                                                 property var tl: modelData
-                                                property bool belongsToWs: tl.workspace.id === wsDelegate.wsId
+                                                property bool belongsToWs: tl.workspace.id === wsDelegate.wsId && !root.shouldIgnoreToplevel(tl)
                                                 
                                                 visible: belongsToWs
                                                 width: belongsToWs ? 20 : 0
@@ -571,7 +721,7 @@ Item {
                                                     sourceSize.height: 20
                                                     Component.onCompleted: {
                                                         var ipc = tl.lastIpcObject || {};
-                                                        var c = (ipc.class || "").toLowerCase();
+                                                        var c = root.resolveCanonicalAppName(ipc.class || ipc.initialClass || tl.appId || "");
                                                         if (c) {
                                                             source = root.getPreviewIcon(c);
                                                         }
@@ -588,7 +738,7 @@ Item {
                                                             anchors.centerIn: parent
                                                             text: {
                                                                 var ipc = tl.lastIpcObject || {};
-                                                                var c = ipc.class || "";
+                                                                var c = root.resolveCanonicalAppName(ipc.class || ipc.initialClass || tl.appId || "");
                                                                 return c ? c.charAt(0).toUpperCase() : "?";
                                                             }
                                                             color: "white"
@@ -614,7 +764,7 @@ Item {
                                 delegate: Item {
                                     id: appDelegate
                                     property var tl: modelData
-                                    property bool belongsToWs: tl.workspace.id === wsDelegate.wsId
+                                    property bool belongsToWs: tl.workspace.id === wsDelegate.wsId && !root.shouldIgnoreToplevel(tl)
                                     
                                     visible: belongsToWs
                                     width: belongsToWs ? 24 : 0
@@ -637,7 +787,7 @@ Item {
                                         if (!tl) return "";
                                         
                                         var ipc = tl.lastIpcObject || {};
-                                        var classHint = root.normalizeAppName((ipc.class || tl.appId || ""));
+                                        var classHint = root.resolveCanonicalAppName(ipc.class || ipc.initialClass || tl.appId || "");
                                         var title = tl.title || "";
                                         var c = classHint !== "" ? classHint : root.detectAppFromTitle(title);
                                         

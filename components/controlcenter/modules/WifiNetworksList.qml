@@ -274,16 +274,17 @@ Item {
         spacing: 8
         z: 1
 
-        Row {
-            width: 430
+        Item {
+            width: parent.width
             height: 32
-            spacing: 8
 
             Rectangle {
+                id: wifiBackBtn
                 width: 26
                 height: 26
                 radius: 13
                 color: backButtonMouse.containsMouse ? "#30FFFFFF" : "transparent"
+                anchors.left: parent.left
                 anchors.verticalCenter: parent.verticalCenter
                 Behavior on color { ColorAnimation { duration: 150 } }
                 Text {
@@ -307,16 +308,17 @@ Item {
                 color: "white"
                 font.pixelSize: 16
                 font.bold: true
+                anchors.left: wifiBackBtn.right
+                anchors.leftMargin: 8
                 anchors.verticalCenter: parent.verticalCenter
             }
-
-            Item { width: 310; height: 1 }
 
             Rectangle {
                 width: 48
                 height: 28
                 radius: 14
                 color: root.wifiEnabled ? "#0A84FF" : "#4CFFFFFF"
+                anchors.right: parent.right
                 anchors.verticalCenter: parent.verticalCenter
                 Behavior on color { ColorAnimation { duration: 150 } }
                 Rectangle {
@@ -379,27 +381,29 @@ Item {
                 radius: 8
                 color: "#15FFFFFF"
                 visible: root.wifiEnabled
-                Row {
+
+                Item {
                     anchors.fill: parent
                     anchors.leftMargin: 10
                     anchors.rightMargin: 10
-                    spacing: 10
-                    
+
                     Rectangle {
+                        id: activeConnIcon
                         width: 32
                         height: 32
                         radius: 16
                         color: "#35FFFFFF"
+                        anchors.left: parent.left
                         anchors.verticalCenter: parent.verticalCenter
-                        
+
                         Loader {
                             width: 18
                             height: 18
                             anchors.centerIn: parent
                             property string currentType: root.activeType
-                            
+
                             sourceComponent: (currentType.indexOf("ethernet") !== -1) ? ethernetIcon : wifiIcon
-                            
+
                             onCurrentTypeChanged: {
                                 if (item && currentType.indexOf("ethernet") === -1) {
                                     item.signal = 100
@@ -414,11 +418,36 @@ Item {
                             }
                         }
                     }
-                    
+
+                    Rectangle {
+                        id: disconnectBtn
+                        width: 74
+                        height: 26
+                        radius: 6
+                        color: "#20FFFFFF"
+                        visible: root.activeType === "wifi" && root.activeName
+                        anchors.right: parent.right
+                        anchors.verticalCenter: parent.verticalCenter
+                        Text {
+                            anchors.centerIn: parent
+                            text: "Disconnect"
+                            color: "white"
+                            font.pixelSize: 11
+                            font.bold: true
+                        }
+                        MouseArea {
+                            anchors.fill: parent
+                            onClicked: disconnectActive.running = true
+                        }
+                    }
+
                     Column {
+                        anchors.left: activeConnIcon.right
+                        anchors.leftMargin: 10
+                        anchors.right: disconnectBtn.visible ? disconnectBtn.left : parent.right
+                        anchors.rightMargin: disconnectBtn.visible ? 10 : 0
                         anchors.verticalCenter: parent.verticalCenter
                         spacing: 2
-                        width: parent.width - 90
                         Text {
                             text: root.activeName || "Not Connected"
                             color: "white"
@@ -430,24 +459,6 @@ Item {
                             text: (root.activeType === "wifi" && root.activeName) ? "Connected" : ""
                             color: "#88FFFFFF"
                             font.pixelSize: 10
-                        }
-                    }
-                    Rectangle {
-                        width: 74
-                        height: 26
-                        radius: 6
-                        color: "#20FFFFFF"
-                        visible: root.activeType === "wifi" && root.activeName
-                        Text {
-                            anchors.centerIn: parent
-                            text: "Disconnect"
-                            color: "white"
-                            font.pixelSize: 11
-                            font.bold: true
-                        }
-                        MouseArea {
-                            anchors.fill: parent
-                            onClicked: disconnectActive.running = true
                         }
                     }
                 }

@@ -272,7 +272,7 @@ Item {
         // En mode expanded : chanfrein léger seulement (panneau large, pas de ruban).
         property real chamfer: root.hovered ? expandedRadius : height
 
-        property color fillColor: hovered ? '#f0000000' : '#fa000000'
+        property color fillColor: hovered ? '#ff000000' : '#fa000000'
         property color strokeColor: hovered ? "#30FFFFFF" : "#33FFFFFF"
         property color color: fillColor
 
@@ -1504,11 +1504,12 @@ Item {
         // ==================================================
         BluetoothDevicesList {
             id: bluetoothList
-            anchors.fill: parent
+            width: 460
+            anchors.horizontalCenter: parent.horizontalCenter
+            anchors.top: parent.top
             anchors.topMargin: 12
+            anchors.bottom: parent.bottom
             anchors.bottomMargin: 12
-            anchors.leftMargin: 12
-            anchors.rightMargin: 12
             pollingEnabled: root.bluetoothPageActive
             
             opacity: root.hovered && root.showingBluetoothDevices ? 1 : 0
@@ -1528,11 +1529,12 @@ Item {
         // ==================================================
         WifiNetworksList {
             id: wifiList
-            anchors.fill: parent
+            width: 460
+            anchors.horizontalCenter: parent.horizontalCenter
+            anchors.top: parent.top
             anchors.topMargin: 12
+            anchors.bottom: parent.bottom
             anchors.bottomMargin: 12
-            anchors.leftMargin: 12
-            anchors.rightMargin: 12
 
             opacity: root.hovered && root.showingWifiNetworks ? 1 : 0
             visible: root.currentContainerIndex === 0 && opacity > 0

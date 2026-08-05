@@ -9,6 +9,7 @@ Rectangle {
     
     property bool isActive: false
     property int brightnessLevel: 100
+    property int previousBrightnessLevel: 100
     property string displayName: "Display"  // Nom affiché
     property string deviceName: ""  // Nom du device pour brightnessctl (vide = default)
     property bool pollingEnabled: true
@@ -21,6 +22,31 @@ Rectangle {
     border.width: 1
     
     Behavior on color { ColorAnimation { duration: 150 } }
+
+    function setBrightnessLevel(level) {
+        var newBrightness = Math.max(0, Math.min(100, Math.round(level)));
+        brightnessLevel = newBrightness;
+        sliderMouse.value = newBrightness / 100;
+        if (newBrightness > 0) {
+            previousBrightnessLevel = newBrightness;
+        }
+
+        var cmd = "dev=\"\"; ";
+        cmd += "if [ \"" + root.deviceName + "\" != \"\" ]; then dev=\"" + root.deviceName + "\"; else ";
+        cmd += "dev=$(ls /sys/class/backlight 2>/dev/null | grep -Ev 'screen|screenpad' | head -n1); if [ -z \"$dev\" ]; then dev=$(ls /sys/class/backlight 2>/dev/null | head -n1); fi; fi; ";
+        cmd += "if [ -n \"$dev\" ]; then brightnessctl -d \"$dev\" s " + newBrightness + "% 2>/dev/null; else brightnessctl s " + newBrightness + "% 2>/dev/null || light -S " + newBrightness + " 2>/dev/null; fi";
+        setBrightness.command = ["sh", "-c", cmd];
+        setBrightness.running = true;
+    }
+
+    function toggleBrightnessMinimum() {
+        if (brightnessLevel <= 0) {
+            setBrightnessLevel(previousBrightnessLevel > 0 ? previousBrightnessLevel : 100);
+        } else {
+            previousBrightnessLevel = brightnessLevel;
+            setBrightnessLevel(0);
+        }
+    }
     
     // Lecture de la luminosité actuelle
     Process {
@@ -45,6 +71,9 @@ Rectangle {
                         var percent = Math.round((current / max) * 100);
                         root.brightnessLevel = percent;
                         sliderMouse.value = percent / 100;
+                        if (percent > 0) {
+                            root.previousBrightnessLevel = percent;
+                        }
                     }
                 }
             }
@@ -122,6 +151,12 @@ Rectangle {
                 height: 18
                 anchors.verticalCenter: parent.verticalCenter
                 opacity: 0.6
+
+                MouseArea {
+                    anchors.fill: parent
+                    cursorShape: Qt.PointingHandCursor
+                    onClicked: root.toggleBrightnessMinimum()
+                }
                 
                 // Cercle central
                 Rectangle {
@@ -143,6 +178,16 @@ Rectangle {
                         x: parent.width / 2 - width / 2 + Math.cos((index * 45) * Math.PI / 180) * 7
                         y: parent.height / 2 - height / 2 + Math.sin((index * 45) * Math.PI / 180) * 7
                     }
+                }
+
+                Rectangle {
+                    visible: root.brightnessLevel <= 0
+                    width: 2
+                    height: parent.height + 2
+                    radius: 1
+                    color: "white"
+                    rotation: -45
+                    anchors.centerIn: parent
                 }
             }
             
@@ -200,14 +245,7 @@ Rectangle {
                         } else if (wheel.angleDelta.y < 0) {
                             value = Math.max(0, value - step / 100);
                         }
-                        var newBrightness = Math.round(value * 100);
-                        root.brightnessLevel = newBrightness;
-                        var cmd = "dev=\"\"; ";
-                        cmd += "if [ \"" + root.deviceName + "\" != \"\" ]; then dev=\"" + root.deviceName + "\"; else ";
-                        cmd += "dev=$(ls /sys/class/backlight 2>/dev/null | grep -Ev 'screen|screenpad' | head -n1); if [ -z \"$dev\" ]; then dev=$(ls /sys/class/backlight 2>/dev/null | head -n1); fi; fi; ";
-                        cmd += "if [ -n \"$dev\" ]; then brightnessctl -d \"$dev\" s " + newBrightness + "% 2>/dev/null; else brightnessctl s " + newBrightness + "% 2>/dev/null || light -S " + newBrightness + " 2>/dev/null; fi";
-                        setBrightness.command = ["sh", "-c", cmd];
-                        setBrightness.running = true;
+                        root.setBrightnessLevel(Math.round(value * 100));
                     }
                     
                     onEntered: {
@@ -231,17 +269,7 @@ Rectangle {
                     
                     function updateValue(mouseX) {
                         value = Math.max(0, Math.min(1, mouseX / width));
-                        var newBrightness = Math.round(value * 100);
-                        root.brightnessLevel = newBrightness;
-                        
-                        // Appliquer la luminosité avec brightnessctl
-                        // prefer a backlight device excluding screen/screenpad when deviceName not provided
-                        var cmd = "dev=\"\"; ";
-                        cmd += "if [ \"" + root.deviceName + "\" != \"\" ]; then dev=\"" + root.deviceName + "\"; else ";
-                        cmd += "dev=$(ls /sys/class/backlight 2>/dev/null | grep -Ev 'screen|screenpad' | head -n1); if [ -z \"$dev\" ]; then dev=$(ls /sys/class/backlight 2>/dev/null | head -n1); fi; fi; ";
-                        cmd += "if [ -n \"$dev\" ]; then brightnessctl -d \"$dev\" s " + newBrightness + "% 2>/dev/null; else brightnessctl s " + newBrightness + "% 2>/dev/null || light -S " + newBrightness + " 2>/dev/null; fi";
-                        setBrightness.command = ["sh", "-c", cmd];
-                        setBrightness.running = true;
+                        root.setBrightnessLevel(Math.round(value * 100));
                     }
                     
                     onPositionChanged: {

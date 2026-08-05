@@ -11,6 +11,7 @@ Rectangle {
     property int volumeLevel: 50
     property bool isMuted: false
     property int lastKnownVolume: 50  // Pour calculer la différence
+    property int previousVolumeLevel: 50
     property bool pollingEnabled: true
     signal interactionStarted()
     signal interactionEnded()
@@ -32,6 +33,35 @@ Rectangle {
 
     Behavior on color { ColorAnimation { duration: 150 } }
 
+    function setVolumeLevel(level) {
+        var newVolume = Math.max(0, Math.min(100, Math.round(level)));
+        volumeLevel = newVolume;
+        lastKnownVolume = newVolume;
+        sliderMouse.value = newVolume / 100;
+        if (newVolume > 0) {
+            previousVolumeLevel = newVolume;
+        }
+
+        setVolume.command = ["sh", "-c", root.sinkResolvePrefix() + "if [ -n \"$target\" ]; then pactl set-sink-volume \"$target\" " + newVolume + "%; fi"];
+        setVolume.running = true;
+
+        if (root.isMuted && newVolume > 0) {
+            unmuteVolume.command = ["sh", "-c", root.sinkResolvePrefix() + "if [ -n \"$target\" ]; then pactl set-sink-mute \"$target\" 0; fi"];
+            unmuteVolume.running = true;
+        } else if (newVolume === 0) {
+            root.isMuted = false;
+        }
+    }
+
+    function toggleVolumeMinimum() {
+        if (volumeLevel <= 0) {
+            setVolumeLevel(previousVolumeLevel > 0 ? previousVolumeLevel : 50);
+        } else {
+            previousVolumeLevel = volumeLevel;
+            setVolumeLevel(0);
+        }
+    }
+
     // Lecture du volume actuel (global-audio en priorité)
     Process {
         id: getVolume
@@ -45,6 +75,9 @@ Rectangle {
                     root.volumeLevel = vol;
                     root.lastKnownVolume = vol;
                     sliderMouse.value = vol / 100;
+                    if (vol > 0) {
+                        root.previousVolumeLevel = vol;
+                    }
                 }
             }
         }
@@ -155,6 +188,12 @@ Rectangle {
                 height: 18
                 anchors.verticalCenter: parent.verticalCenter
                 opacity: root.isMuted ? 0.3 : 0.7
+
+                MouseArea {
+                    anchors.fill: parent
+                    cursorShape: Qt.PointingHandCursor
+                    onClicked: root.toggleVolumeMinimum()
+                }
                 
                 // Rectangle du haut-parleur (base)
                 Rectangle {
@@ -202,6 +241,16 @@ Rectangle {
                         ctx.arc(-2, 5, 5, -0.5, 0.5, false);
                         ctx.stroke();
                     }
+                }
+
+                Rectangle {
+                    visible: root.volumeLevel <= 0
+                    width: 2
+                    height: parent.height + 2
+                    radius: 1
+                    color: "white"
+                    rotation: -45
+                    anchors.centerIn: parent
                 }
             }
             
@@ -259,15 +308,7 @@ Rectangle {
                         } else if (wheel.angleDelta.y < 0) {
                             value = Math.max(0, value - step / 100);
                         }
-                        var newVolume = Math.round(value * 100);
-                        root.volumeLevel = newVolume;
-                        root.lastKnownVolume = newVolume;
-                        setVolume.command = ["sh", "-c", root.sinkResolvePrefix() + "if [ -n \"$target\" ]; then pactl set-sink-volume \"$target\" " + newVolume + "%; fi"];
-                        setVolume.running = true;
-                        if (root.isMuted && newVolume > 0) {
-                            unmuteVolume.command = ["sh", "-c", root.sinkResolvePrefix() + "if [ -n \"$target\" ]; then pactl set-sink-mute \"$target\" 0; fi"];
-                            unmuteVolume.running = true;
-                        }
+                        root.setVolumeLevel(Math.round(value * 100));
                     }
                     
                     onEntered: {
@@ -295,21 +336,7 @@ Rectangle {
                     
                     function updateValue(mouseX) {
                         value = Math.max(0, Math.min(1, mouseX / width));
-                        var newVolume = Math.round(value * 100);
-                        
-                        // Mettre à jour directement avec la valeur absolue (même à 0)
-                        root.volumeLevel = newVolume;
-                        root.lastKnownVolume = newVolume;
-                        
-                        // Appliquer directement sur global-audio (fallback défaut si absent)
-                        setVolume.command = ["sh", "-c", root.sinkResolvePrefix() + "if [ -n \"$target\" ]; then pactl set-sink-volume \"$target\" " + newVolume + "%; fi"];
-                        setVolume.running = true;
-
-                        // Unmute si on change le volume au-dessus de 0
-                        if (root.isMuted && newVolume > 0) {
-                            unmuteVolume.command = ["sh", "-c", root.sinkResolvePrefix() + "if [ -n \"$target\" ]; then pactl set-sink-mute \"$target\" 0; fi"];
-                            unmuteVolume.running = true;
-                        }
+                        root.setVolumeLevel(Math.round(value * 100));
                     }
                     
                     onPositionChanged: {
